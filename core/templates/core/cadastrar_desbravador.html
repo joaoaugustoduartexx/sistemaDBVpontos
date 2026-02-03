@@ -1,0 +1,49 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        
+        <div class="card shadow border-0">
+            <div class="card-header bg-white border-bottom-0 pt-4 text-center">
+                <div class="d-inline-block bg-success text-white rounded-circle p-3 mb-2 shadow-sm">
+                    <i class="fas fa-user-plus fa-2x"></i>
+                </div>
+                <h4 class="fw-bold text-dark mb-0">Novo Desbravador</h4>
+                <p class="text-muted">Adicionando à unidade <strong>{{ user.unidade_responsavel.nome }}</strong></p>
+            </div>
+
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-secondary">Nome Completo</label>
+                        {{ form.nome_completo }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-secondary">Data de Nascimento</label>
+                        {{ form.data_nascimento }}
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-secondary">Anotações (Alergias, remédios, etc)</label>
+                        {{ form.anotacoes_gerais }}
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success btn-lg fw-bold shadow-sm">
+                            <i class="fas fa-save me-2"></i> CADASTRAR MEMBRO
+                        </button>
+                        <a href="{% url 'minha_unidade' %}" class="btn btn-link text-muted text-decoration-none text-center">
+                            Cancelar e Voltar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

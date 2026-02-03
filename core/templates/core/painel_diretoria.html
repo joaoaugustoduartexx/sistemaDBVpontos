@@ -1,0 +1,158 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+    <h2 class="mb-0"><i class="fas fa-crown text-warning me-2"></i>Painel da Diretoria</h2>
+    
+    <div class="d-flex gap-2">
+        <a href="{% url 'relatorio_mensal' %}" class="btn btn-outline-primary shadow-sm">
+            <i class="fas fa-file-alt me-2"></i>Relatório Mensal
+        </a>
+        <a href="{% url 'cadastrar_desbravador' %}" class="btn btn-success shadow-sm">
+            <i class="fas fa-plus me-2"></i>Novo Membro
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4 g-3">
+    <div class="col-6 col-md-3">
+        <div class="card bg-primary text-white border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="text-uppercase small opacity-75">Membros Ativos</h6>
+                <h2 class="fw-bold mb-0">{{ desbravadores.count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card bg-success text-white border-0 shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="text-uppercase small opacity-75">Unidades</h6>
+                <h2 class="fw-bold mb-0">{{ unidades.count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-6">
+        <div class="card bg-white text-dark border-0 shadow-sm h-100 d-flex flex-row align-items-center px-3">
+            <div class="flex-grow-1">
+                <h6 class="text-uppercase text-muted small mb-1">Busca e Filtros</h6>
+                <form method="get" class="d-flex gap-2">
+                    <input type="text" name="busca" class="form-control form-control-sm" placeholder="Buscar por nome..." value="{{ request.GET.busca }}">
+                    
+                    <select name="unidade" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">Todas Unidades</option>
+                        {% for uni in unidades %}
+                        <option value="{{ uni.id }}" {% if filtro_atual == uni.id %}selected{% endif %}>{{ uni.nome }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-dark">Filtrar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4 border-warning shadow-sm" style="border-width: 2px;">
+    <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
+        <span><i class="fas fa-bolt me-2"></i>Ação em Massa (Selecionados)</span>
+        <span class="badge bg-dark" id="countSelected">0 selecionados</span>
+    </div>
+    <div class="card-body bg-light">
+        <form method="post" id="formPontuacao">
+            {% csrf_token %}
+            <div class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold small text-muted">MOTIVO DA PONTUAÇÃO</label>
+                    <input type="text" name="motivo" class="form-control shadow-sm" placeholder="Ex: Participação no Campori">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold small text-muted">PONTOS</label>
+                    <input type="number" name="pontos" class="form-control shadow-sm" placeholder="Ex: 10 ou -10">
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-dark w-100 fw-bold shadow-sm">
+                        <i class="fas fa-save me-2"></i>Aplicar Pontos
+                    </button>
+                </div>
+            </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 50px;" class="ps-3">
+                        <input type="checkbox" id="selectAll" class="form-check-input">
+                    </th>
+                    <th>Desbravador</th>
+                    <th class="text-center">Unidade</th>
+                    <th class="text-center">Ações Sênior</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dbv in desbravadores %}
+                <tr>
+                    <td class="ps-3">
+                        <input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item">
+                    </td>
+                    <td>
+                        <div class="fw-bold">{{ dbv.nome_completo }}</div>
+                        <small class="text-muted">ID: #{{ dbv.id }}</small>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge rounded-pill {{ dbv.unidade.cor }} px-3">
+                            {{ dbv.unidade.nome }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <div class="btn-group shadow-sm">
+                            <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border">
+                                <i class="fas fa-star text-warning me-1"></i> Pontuar
+                            </a>
+                            <button type="button" class="btn btn-sm btn-white border">
+                                <i class="fas fa-edit text-primary"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center py-5 text-muted">
+                        <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
+                        <p>Nenhum desbravador encontrado.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </form> </div>
+</div>
+
+<script>
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.checkbox-item');
+    const countDisplay = document.getElementById('countSelected');
+
+    function updateCounter() {
+        const checkedCount = document.querySelectorAll('.checkbox-item:checked').length;
+        countDisplay.textContent = checkedCount + " selecionados";
+        countDisplay.className = checkedCount > 0 ? "badge bg-danger" : "badge bg-dark";
+    }
+
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        updateCounter();
+    });
+
+    checkboxes.forEach(cb => cb.addEventListener('change', updateCounter));
+
+    document.getElementById('formPontuacao').addEventListener('submit', function(e) {
+        var selecionados = document.querySelectorAll('.checkbox-item:checked').length;
+        if (selecionados === 0) {
+            e.preventDefault();
+            alert('Selecione pelo menos um desbravador para pontuar em massa.');
+        }
+    });
+</script>
+{% endblock %}

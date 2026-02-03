@@ -1,0 +1,59 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
+        <h2 class="mb-0"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>Fechamento Mensal</h2>
+        <div>
+            <a href="{% url 'painel_diretoria' %}" class="btn btn-outline-secondary me-2">Voltar</a>
+            <button onclick="window.print()" class="btn btn-dark">
+                <i class="fas fa-print me-2"></i>Imprimir Relatório
+            </button>
+        </div>
+    </div>
+
+    <div class="card shadow border-0">
+        <div class="card-header bg-dark text-white p-3 text-center">
+            <h4 class="mb-0 text-uppercase">Relatório de Pontuação - {{ mes }}</h4>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle mb-0">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>Desbravador</th>
+                        <th>Unidade</th>
+                        <th class="text-center">Avaliações (Semanais)</th>
+                        <th class="text-center">Bônus/Extras</th>
+                        <th class="text-center bg-warning text-dark">Total Geral</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dbv in relatorio %}
+                    <tr>
+                        <td class="fw-bold ps-3">{{ dbv.nome_completo }}</td>
+                        <td><span class="badge bg-light text-dark border">{{ dbv.unidade.nome }}</span></td>
+                        <td class="text-center">{{ dbv.total_avaliacoes|default:0 }} pts</td>
+                        <td class="text-center {% if dbv.total_extras < 0 %}text-danger{% else %}text-success{% endif %}">
+                            {{ dbv.total_extras|default:0 }} pts
+                        </td>
+                        <td class="text-center fw-bold bg-light">
+                            {{ dbv.pontuação_final|default:0 }} pts
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4">Nenhum dado encontrado para este mês.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="mt-4 d-none d-print-block">
+        <div class="row text-center mt-5">
+            <div class="col-6"><hr class="mx-5"><p>Assinatura do Secretário(a)</p></div>
+            <div class="col-6"><hr class="mx-5"><p>Assinatura do Diretor(a)</p></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

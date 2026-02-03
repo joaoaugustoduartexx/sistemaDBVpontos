@@ -1,0 +1,19 @@
+# --- BANCO DE DADOS (CRUCIAL) ---
+db.sqlite3
+
+# --- AMBIENTE VIRTUAL ---
+venv/
+env/
+.env
+
+# --- ARQUIVOS COMPILADOS DO PYTHON (Lixo) ---
+__pycache__/
+*.pyc
+
+# --- ARQUIVOS DO SISTEMA OPERACIONAL ---
+.DS_Store
+Thumbs.db
+
+# --- MÍDIA (Opcional, mas recomendado) ---
+# Evita subir fotos de teste se tiver upload de imagens
+media/

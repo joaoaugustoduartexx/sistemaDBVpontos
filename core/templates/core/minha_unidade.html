@@ -1,0 +1,71 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-3">
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Voltar ao Ranking
+        </a>
+    </div>
+
+    <div class="col-12">
+        <div class="card bg-primary text-white mb-4 border-0 shadow" style="background: linear-gradient(45deg, #0d47a1, #1565c0);">
+            <div class="card-body p-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1 text-white-50 text-uppercase ls-1">Painel do Conselheiro</h6>
+                    <h2 class="fw-bold mb-0">Unidade {{ unidade.nome }}</h2>
+                </div>
+                <i class="fas fa-flag fa-4x text-white opacity-25"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <h4 class="text-secondary mb-0 fw-bold">Membros Ativos</h4>
+        <a href="{% url 'cadastrar_desbravador' %}" class="btn btn-success fw-bold shadow-sm">
+            <i class="fas fa-user-plus me-2"></i> Novo Membro
+        </a>
+    </div>
+
+    <div class="row">
+    {% for membro in membros %}
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 border-0 shadow-sm hover-up">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="bg-light rounded-circle p-3 me-3 text-primary shadow-sm">
+                        <i class="fas fa-user fa-lg"></i>
+                    </div>
+                    <div>
+                        <h5 class="card-title fw-bold mb-0 text-dark">{{ membro.nome_completo }}</h5>
+                        <small class="text-muted">
+                            <i class="fas fa-birthday-cake me-1"></i> {{ membro.data_nascimento|date:"d/m/Y" }}
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="d-grid">
+                    <a href="{% url 'avaliar_membro' membro.id %}" class="btn btn-outline-primary fw-bold">
+                        <i class="fas fa-clipboard-check me-2"></i> Lançar Pontos
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12 text-center py-5">
+        <div class="text-muted opacity-75">
+            <i class="fas fa-user-slash fa-4x mb-3"></i>
+            <h4>Nenhum desbravador encontrado.</h4>
+            <p>Use o botão verde acima para cadastrar os membros da sua unidade.</p>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+</div>
+
+<style>
+    .hover-up { transition: transform 0.2s; }
+    .hover-up:hover { transform: translateY(-5px); }
+</style>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends 'core/base.html' %} 
+
+{% block content %}
+<style>
+    .calendar-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .calendar-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 4px; margin-top: 10px; }
+    .calendar-table th { text-align: center; padding: 10px; color: #6c757d; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
+    .calendar-table td { height: 120px; vertical-align: top; border: 1px solid #e9ecef; border-radius: 8px; padding: 5px; width: 14.28%; background-color: #fff; transition: all 0.2s; }
+    .calendar-table td:hover { background-color: #f8f9fa; border-color: #dee2e6; }
+    .calendar-table td.today { background-color: #fff8e1; border: 2px solid #ffc107; }
+    .calendar-table td.empty { background-color: transparent; border: none; }
+    
+    .date-number { font-weight: bold; margin-bottom: 5px; display: block; color: #495057; font-size: 0.9rem; text-align: right; }
+    
+    .evento-badge { 
+        display: block;
+        background-color: #0d6efd; 
+        color: white; 
+        font-size: 0.75rem; 
+        font-weight: 600;
+        padding: 4px 6px; 
+        margin-bottom: 3px; 
+        border-radius: 4px; 
+        text-decoration: none;
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis;
+        transition: 0.2s;
+    }
+    .evento-badge:hover { background-color: #0a58ca; color: white; }
+    .evento-global { background-color: #198754; } /* Verde para eventos globais */
+</style>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="?mes={{ ant_mes }}&ano={{ ant_ano }}" class="btn btn-outline-primary shadow-sm">
+            <i class="fas fa-chevron-left"></i> Anterior
+        </a>
+        
+        <h3 class="text-center mb-0 fw-bold text-primary">
+            {{ mes_atual|date:"F Y"|title }}
+        </h3>
+        
+        <a href="?mes={{ prox_mes }}&ano={{ prox_ano }}" class="btn btn-outline-primary shadow-sm">
+            Próximo <i class="fas fa-chevron-right"></i>
+        </a>
+    </div>
+
+    <div class="calendar-container">
+        <a href="{% url 'cadastrar_evento' %}" class="btn btn-success mb-3 shadow-sm fw-bold">
+            <i class="fas fa-plus-circle me-2"></i> Agendar Novo Evento
+        </a>
+
+        <div class="table-responsive">
+            <table class="calendar-table">
+                <thead>
+                    <tr>
+                        <th>Seg</th>
+                        <th>Ter</th>
+                        <th>Qua</th>
+                        <th>Qui</th>
+                        <th>Sex</th>
+                        <th>Sáb</th>
+                        <th>Dom</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for semana in semanas %}
+                    <tr>
+                        {% for dia in semana %}
+                            {% if dia %}
+                                <td class="{% if dia.hoje %}today{% endif %}">
+                                    <span class="date-number">{{ dia.dia }}</span>
+                                    
+                                    {% for evento in dia.eventos %}
+                                        <a href="#" class="evento-badge {% if not evento.unidade %}evento-global{% endif %}" 
+                                           data-bs-toggle="modal" 
+                                           data-bs-target="#verEventoModal"
+                                           data-titulo="{{ evento.titulo }}"
+                                           data-data="{{ evento.data_evento|date:'d/m/Y' }}"
+                                           data-descricao="{{ evento.descricao }}">
+                                            {% if not evento.unidade %}★{% endif %} {{ evento.titulo }}
+                                        </a>
+                                    {% endfor %}
+                                </td>
+                            {% else %}
+                                <td class="empty"></td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="verEventoModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="modalTitulo">Evento</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="small text-muted text-uppercase fw-bold">Data</label>
+                    <div id="modalData" class="fs-5 fw-bold text-dark"></div>
+                </div>
+                <div>
+                    <label class="small text-muted text-uppercase fw-bold">Descrição</label>
+                    <div id="modalDescricao" class="p-3 bg-light rounded text-secondary border"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var verEventoModal = document.getElementById('verEventoModal')
+        verEventoModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget
+            var titulo = button.getAttribute('data-titulo')
+            var data = button.getAttribute('data-data')
+            var descricao = button.getAttribute('data-descricao')
+            
+            verEventoModal.querySelector('#modalTitulo').textContent = titulo
+            verEventoModal.querySelector('#modalData').textContent = data
+            verEventoModal.querySelector('#modalDescricao').textContent = descricao || "Sem descrição disponível."
+        })
+    })
+</script>
+{% endblock %}

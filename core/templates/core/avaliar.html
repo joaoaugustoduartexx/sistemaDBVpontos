@@ -1,0 +1,97 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 900px;">
+    
+    <div class="card shadow-lg border-0">
+        <div class="card-header text-white py-3 d-flex justify-content-between align-items-center" style="background-color: #0d47a1;">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard-check me-2"></i>Avaliação Semanal</h5>
+            <span class="badge bg-warning text-dark">{{ membro.nome_completo }}</span>
+        </div>
+        
+        <div class="card-body bg-light">
+            <form method="POST">
+                {% csrf_token %}
+
+                <div class="row mb-4 bg-white p-3 rounded shadow-sm mx-1">
+                    <div class="col-md-6">
+                        <label class="fw-bold small text-muted text-uppercase">Desbravador</label>
+                        <div class="fs-5 fw-bold">{{ membro.nome_completo }}</div>
+                        <div class="d-none">{{ form.desbravador }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="fw-bold small text-muted text-uppercase">Data da Reunião</label>
+                        {{ form.data }}
+                    </div>
+                </div>
+
+                <ul class="nav nav-pills nav-fill mb-4 gap-2" id="minhaAba" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold shadow-sm" id="regular-tab" data-bs-toggle="pill" data-bs-target="#regular" type="button">
+                            <i class="fas fa-users me-2"></i> Reunião Regular
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold shadow-sm" id="igreja-tab" data-bs-toggle="pill" data-bs-target="#igreja" type="button">
+                            <i class="fas fa-church me-2"></i> Igreja
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold shadow-sm" id="comunidade-tab" data-bs-toggle="pill" data-bs-target="#comunidade" type="button">
+                            <i class="fas fa-guitar me-2"></i> Atividades Extras
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content p-4 bg-white rounded shadow-sm" id="minhaAbaContent">
+                    
+                    <div class="tab-pane fade show active" id="regular">
+                        <h6 class="border-bottom pb-2 mb-3 text-primary">Critérios da Reunião</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6"><label class="fw-bold small">Bíblia</label>{{ form.biblia }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Uniforme</label>{{ form.uniforme }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Lenço</label>{{ form.lenco }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Fazer o Ideal</label>{{ form.fazer_ideal }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Orar</label>{{ form.orar }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Participação Ativa</label>{{ form.participacao }}</div>
+                            <div class="col-12"><label class="fw-bold small">Itens do Cartão/Classe</label>{{ form.itens_cartao }}</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="igreja">
+                        <h6 class="border-bottom pb-2 mb-3 text-success">Critérios Espirituais</h6>
+                        <div class="row g-3">
+                            <div class="col-12"><label class="fw-bold small">Clube Visível (Uniforme na Igreja)</label>{{ form.clube_visivel }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Estudo Bíblico</label>{{ form.estudo_biblico }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Escola Sabatina</label>{{ form.escola_sabatina }}</div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="comunidade">
+                        <h6 class="border-bottom pb-2 mb-3 text-warning">Critérios Extras</h6>
+                        <div class="row g-3">
+                            <div class="col-12"><label class="fw-bold small">Pequeno Grupo</label>{{ form.pequeno_grupo }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Ensaio Fanfarra</label>{{ form.fanfarra }}</div>
+                            <div class="col-md-6"><label class="fw-bold small">Ensaio Ordem Unida</label>{{ form.ordem_unida }}</div>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <div class="mt-4">
+                    <label class="fw-bold mb-2">Observações Gerais</label>
+                    {{ form.observacao }}
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-lg text-white fw-bold shadow-sm" style="background-color: #0d47a1;">
+                        <i class="fas fa-save me-2"></i> SALVAR AVALIAÇÃO
+                    </button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

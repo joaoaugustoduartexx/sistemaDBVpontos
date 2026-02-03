@@ -1,0 +1,57 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-md-5 col-lg-4">
+        
+        <div class="text-center mb-4">
+            <div class="d-inline-block bg-primary text-white rounded-circle shadow-lg p-4 mb-3">
+                <i class="fas fa-shield-alt fa-3x"></i>
+            </div>
+            <h3 class="fw-bold text-dark">Área do Membro</h3>
+            <p class="text-muted">Acesse o sistema do seu Clube</p>
+        </div>
+
+        <div class="card shadow-lg border-0">
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                    <div class="alert alert-danger small p-2 text-center">
+                        Usuário ou senha incorretos.
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">USUÁRIO</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-0"><i class="fas fa-user text-primary"></i></span>
+                            <input type="text" name="username" class="form-control bg-light border-0" placeholder="Seu usuário" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-bold text-muted">SENHA</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-0"><i class="fas fa-lock text-primary"></i></span>
+                            <input type="password" name="password" class="form-control bg-light border-0" placeholder="Sua senha" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg fw-bold shadow-sm py-2">
+                            ENTRAR NO SISTEMA
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4">
+            <p class="small text-muted">Esqueceu a senha? <br>Procure a secretaria do seu clube.</p>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
