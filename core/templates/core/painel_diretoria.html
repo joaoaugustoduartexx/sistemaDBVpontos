@@ -1,9 +1,9 @@
-{% extends 'core/base.html' %}
+{% extends 'core/base.html' %} 
 
 {% block content %}
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
     <h2 class="mb-0"><i class="fas fa-crown text-warning me-2"></i>Painel da Diretoria</h2>
-    
+
     <div class="d-flex gap-2">
         <a href="{% url 'relatorio_mensal' %}" class="btn btn-outline-primary shadow-sm">
             <i class="fas fa-file-alt me-2"></i>Relatório Mensal
@@ -37,7 +37,7 @@
                 <h6 class="text-uppercase text-muted small mb-1">Busca e Filtros</h6>
                 <form method="get" class="d-flex gap-2">
                     <input type="text" name="busca" class="form-control form-control-sm" placeholder="Buscar por nome..." value="{{ request.GET.busca }}">
-                    
+
                     <select name="unidade" class="form-select form-select-sm" onchange="this.form.submit()">
                         <option value="">Todas Unidades</option>
                         {% for uni in unidades %}
@@ -51,82 +51,128 @@
     </div>
 </div>
 
-<div class="card mb-4 border-warning shadow-sm" style="border-width: 2px;">
-    <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
-        <span><i class="fas fa-bolt me-2"></i>Ação em Massa (Selecionados)</span>
-        <span class="badge bg-dark" id="countSelected">0 selecionados</span>
-    </div>
-    <div class="card-body bg-light">
+<ul class="nav nav-tabs mb-3" id="painelDiretoriaTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab" aria-controls="pontuacao-pane" aria-selected="true">
+            <i class="fas fa-bolt me-2"></i>Pontuação em Massa
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab" aria-controls="observacoes-pane" aria-selected="false">
+            <i class="fas fa-comment-dots me-2"></i>Observações Recentes
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="painelDiretoriaTabsContent">
+    <div class="tab-pane fade show active" id="pontuacao-pane" role="tabpanel" aria-labelledby="pontuacao-tab" tabindex="0">
         <form method="post" id="formPontuacao">
             {% csrf_token %}
-            <div class="row g-3 align-items-end">
-                <div class="col-md-6">
-                    <label class="form-label fw-bold small text-muted">MOTIVO DA PONTUAÇÃO</label>
-                    <input type="text" name="motivo" class="form-control shadow-sm" placeholder="Ex: Participação no Campori">
+            <div class="card mb-4 border-warning shadow-sm" style="border-width: 2px;">
+                <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
+                    <span><i class="fas fa-bolt me-2"></i>Ação em Massa (Selecionados)</span>
+                    <span class="badge bg-dark" id="countSelected">0 selecionados</span>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold small text-muted">PONTOS</label>
-                    <input type="number" name="pontos" class="form-control shadow-sm" placeholder="Ex: 10 ou -10">
-                </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-dark w-100 fw-bold shadow-sm">
-                        <i class="fas fa-save me-2"></i>Aplicar Pontos
-                    </button>
-                </div>
-            </div>
-    </div>
-</div>
-
-<div class="card border-0 shadow-sm">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th style="width: 50px;" class="ps-3">
-                        <input type="checkbox" id="selectAll" class="form-check-input">
-                    </th>
-                    <th>Desbravador</th>
-                    <th class="text-center">Unidade</th>
-                    <th class="text-center">Ações Sênior</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for dbv in desbravadores %}
-                <tr>
-                    <td class="ps-3">
-                        <input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item">
-                    </td>
-                    <td>
-                        <div class="fw-bold">{{ dbv.nome_completo }}</div>
-                        <small class="text-muted">ID: #{{ dbv.id }}</small>
-                    </td>
-                    <td class="text-center">
-                        <span class="badge rounded-pill {{ dbv.unidade.cor }} px-3">
-                            {{ dbv.unidade.nome }}
-                        </span>
-                    </td>
-                    <td class="text-center">
-                        <div class="btn-group shadow-sm">
-                            <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border">
-                                <i class="fas fa-star text-warning me-1"></i> Pontuar
-                            </a>
-                            <button type="button" class="btn btn-sm btn-white border">
-                                <i class="fas fa-edit text-primary"></i>
+                <div class="card-body bg-light">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted">MOTIVO DA PONTUAÇÃO</label>
+                            <input type="text" name="motivo" class="form-control shadow-sm" placeholder="Ex: Participação no Campori">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small text-muted">PONTOS</label>
+                            <input type="number" name="pontos" class="form-control shadow-sm" placeholder="Ex: 10 ou -10">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-dark w-100 fw-bold shadow-sm">
+                                <i class="fas fa-save me-2"></i>Aplicar Pontos
                             </button>
                         </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" class="text-center py-5 text-muted">
-                        <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
-                        <p>Nenhum desbravador encontrado.</p>
-                    </td>
-                </tr>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 50px;" class="ps-3">
+                                    <input type="checkbox" id="selectAll" class="form-check-input">
+                                </th>
+                                <th>Desbravador</th>
+                                <th class="text-center">Unidade</th>
+                                <th class="text-center">Ações Sênior</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dbv in desbravadores %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item">
+                                </td>
+                                <td>
+                                    <div class="fw-bold">{{ dbv.nome_completo }}</div>
+                                    <small class="text-muted">ID: #{{ dbv.id }}</small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge rounded-pill bg-secondary px-3">
+                                        {{ dbv.unidade.nome }}
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group shadow-sm">
+                                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border">
+                                            <i class="fas fa-star text-warning me-1"></i> Pontuar
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-white border">
+                                            <i class="fas fa-edit text-primary"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-5 text-muted">
+                                    <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
+                                    <p class="mb-0">Nenhum desbravador encontrado.</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="tab-pane fade" id="observacoes-pane" role="tabpanel" aria-labelledby="observacoes-tab" tabindex="0">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light border-bottom">
+                <h5 class="mb-0 text-dark fw-semibold">Últimas 30 observações registradas</h5>
+            </div>
+            {% if observacoes %}
+            <div class="list-group list-group-flush">
+                {% for obs in observacoes %}
+                <div class="list-group-item py-3">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
+                        <div class="fw-semibold text-dark">{{ obs.desbravador.nome_completo }}</div>
+                        <div class="small text-muted">
+                            {{ obs.data|date:"d/m/Y" }} • {{ obs.autor.username }}
+                        </div>
+                    </div>
+                    <p class="mb-0 text-secondary">{{ obs.observacao }}</p>
+                </div>
                 {% endfor %}
-            </tbody>
-        </table>
-        </form> </div>
+            </div>
+            {% else %}
+            <div class="card-body text-center py-5">
+                <i class="fas fa-comment-slash fa-2x text-muted mb-3"></i>
+                <p class="mb-0 text-muted">Ainda não há observações recentes para exibir.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
 
 <script>

@@ -10,8 +10,8 @@
 
     <div class="col-12">
         <div class="card bg-primary text-white mb-4 border-0 shadow" style="background: linear-gradient(45deg, #0d47a1, #1565c0);">
-            <div class="card-body p-4 d-flex justify-content-between align-items-center">
-                <div>
+            <div class="card-body p-4 d-flex flex-column flex-md-row justify-content-between align-items-center text-center text-md-start">
+                <div class="mb-3 mb-md-0">
                     <h6 class="mb-1 text-white-50 text-uppercase ls-1">Painel do Conselheiro</h6>
                     <h2 class="fw-bold mb-0">Unidade {{ unidade.nome }}</h2>
                 </div>
@@ -20,9 +20,9 @@
         </div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-        <h4 class="text-secondary mb-0 fw-bold">Membros Ativos</h4>
-        <a href="{% url 'cadastrar_desbravador' %}" class="btn btn-success fw-bold shadow-sm">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 pb-2 border-bottom gap-3">
+        <h4 class="text-secondary mb-0 fw-bold text-center">Membros Ativos</h4>
+        <a href="{% url 'cadastrar_desbravador' %}" class="btn btn-success fw-bold shadow-sm w-100 w-md-auto">
             <i class="fas fa-user-plus me-2"></i> Novo Membro
         </a>
     </div>
@@ -31,7 +31,7 @@
     {% for membro in membros %}
     <div class="col-md-6 col-lg-4 mb-4">
         <div class="card h-100 border-0 shadow-sm hover-up">
-            <div class="card-body p-4">
+            <div class="card-body p-3 p-md-4">
                 <div class="d-flex align-items-center mb-4">
                     <div class="bg-light rounded-circle p-3 me-3 text-primary shadow-sm">
                         <i class="fas fa-user fa-lg"></i>
@@ -45,7 +45,7 @@
                 </div>
                 
                 <div class="d-grid">
-                    <a href="{% url 'avaliar_membro' membro.id %}" class="btn btn-outline-primary fw-bold">
+                    <a href="{% url 'avaliar_membro' membro.id %}" class="btn btn-outline-primary fw-bold py-2">
                         <i class="fas fa-clipboard-check me-2"></i> Lançar Pontos
                     </a>
                 </div>
@@ -67,5 +67,8 @@
 <style>
     .hover-up { transition: transform 0.2s; }
     .hover-up:hover { transform: translateY(-5px); }
+    @media (max-width: 768px) {
+        .w-md-auto { width: 100% !important; }
+    }
 </style>
 {% endblock %}

@@ -18,7 +18,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
-            min-height: 100vh; /* Garante que o rodapé vá para o fundo se a página for curta */
+            min-height: 100vh;
         }
         .main-container { margin-top: 30px; margin-bottom: 50px; max-width: 1000px; flex: 1; }
         .navbar-brand { font-weight: bold; letter-spacing: 1px; }
@@ -26,11 +26,34 @@
         .nav-link { font-weight: 500; }
         .nav-link:hover { opacity: 0.8; }
 
-        /* CORES PERSONALIZADAS DE UNIDADES */
+        /* CORES PERSONALIZADAS */
         .bg-rosa { background-color: #e83e8c !important; color: white; }
         .bg-roxo { background-color: #6f42c1 !important; color: white; }
         .bg-laranja { background-color: #fd7e14 !important; color: white; }
         .badge { font-weight: 600; letter-spacing: 0.5px; }
+
+        /* === OTIMIZAÇÃO PARA CELULAR (MOBILE-FIRST) === */
+        @media (max-width: 768px) {
+            .main-container { margin-top: 15px; padding: 0 15px; }
+            
+            /* Aumenta a área de toque dos formulários no celular */
+            select, input[type="text"], input[type="number"], input[type="date"], textarea {
+                width: 100% !important;
+                height: 48px !important;
+                font-size: 16px !important; /* Previne zoom automático do iPhone */
+                border-radius: 8px;
+                padding: 10px;
+                border: 1px solid #ced4da;
+            }
+            
+            textarea { height: auto !important; }
+
+            /* Ajuste dos botões de abas no celular */
+            .nav-pills .nav-link { padding: 12px 5px; font-size: 0.85rem; margin-bottom: 5px; }
+            
+            /* Remove a borda arredondada das tabelas responsivas que criam scroll */
+            .table-responsive { border: 0; margin-bottom: 0; }
+        }
     </style>
 </head>
 <body>
@@ -56,7 +79,7 @@
 
                         {% if user.unidade_responsavel %}
                         <li class="nav-item">
-                            <a class="nav-link fw-bold text-success bg-white rounded px-2 ms-2" href="{% url 'minha_unidade' %}">
+                            <a class="nav-link fw-bold text-success bg-white rounded px-2 ms-2 my-1 my-lg-0" href="{% url 'minha_unidade' %}">
                                 <i class="fas fa-users me-1"></i> Minha Unidade
                             </a>
                         </li>
@@ -64,13 +87,13 @@
 
                         {% if user.is_diretoria %}
                         <li class="nav-item">
-                            <a class="nav-link fw-bold text-warning bg-dark rounded px-2 ms-2" href="{% url 'painel_diretoria' %}">
+                            <a class="nav-link fw-bold text-warning bg-dark rounded px-2 ms-2 my-1 my-lg-0" href="{% url 'painel_diretoria' %}">
                                 <i class="fas fa-crown me-1"></i> Diretoria
                             </a>
                         </li>
                         {% endif %}
 
-                        <li class="nav-item dropdown ms-3">
+                        <li class="nav-item dropdown ms-lg-3 mt-2 mt-lg-0">
                             <a class="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
                                 <i class="fas fa-user-circle me-1"></i> {{ user.username|title }}
                             </a>
@@ -112,10 +135,13 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-white text-center py-4 mt-auto border-top">
+<footer class="bg-white text-center py-4 mt-auto border-top">
         <div class="container">
             <p class="mb-0 text-muted small">
-                &copy; {% now "Y" %} <strong>Sistema DBV</strong> - Desenvolvido por Você. Todos os direitos reservados.
+                &copy; {% now "Y" %} <strong>Sistema DBV</strong> - Todos os direitos reservados. Desenvolvido por 
+                <a href="https://joaoaugustoduartexx.github.io/Curriculo/" target="_blank" style="color: #DAA520; text-decoration: none; transition: 0.3s;">
+                    <strong>João Duarte</strong>
+                </a>.
             </p>
         </div>
     </footer>
@@ -126,7 +152,7 @@
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('{% url "service_worker" %}')
             .then(function(registration) {
-                console.log('DBV App: Service Worker registrado com escopo:', registration.scope);
+                console.log('DBV App: Service Worker registrado');
             }).catch(function(error) {
                 console.log('DBV App: Falha ao registrar Service Worker:', error);
             });

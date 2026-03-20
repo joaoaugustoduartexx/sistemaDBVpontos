@@ -2,7 +2,8 @@ from django.contrib import admin
 from django.urls import path, include
 # Importamos cadastrar_evento aqui
 from core.views import (
-    dashboard, 
+    dashboard,
+    exportar_relatorio_csv, 
     minha_unidade, 
     avaliar_membro, 
     cadastrar_desbravador, 
@@ -31,7 +32,8 @@ urlpatterns = [
     
     # Rotas da Diretoria
     path('diretoria/', painel_diretoria, name='painel_diretoria'),
-    path('diretoria/relatorio/', relatorio_mensal, name='relatorio_mensal'),
+    path('relatorio/', relatorio_mensal, name='relatorio_mensal'),
+    path('diretoria/relatorio/', relatorio_mensal, name='relatorio_mensal_legacy'),
     
     # Rotas do Calendário
     path('calendario/', calendario, name='calendario'),
@@ -39,4 +41,7 @@ urlpatterns = [
     
     # Login/Logout
     path('accounts/', include('django.contrib.auth.urls')),
+
+    # Rota do Exportar CSV
+    path('relatorio/exportar/', exportar_relatorio_csv, name='exportar_relatorio_csv'),
 ]

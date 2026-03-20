@@ -9,8 +9,7 @@ from django.utils.safestring import mark_safe
 from django.http import HttpResponse, JsonResponse
 from django.conf import settings
 import calendar
-
-# ADICIONADO 'Evento' aqui para corrigir o NameError
+import csv
 from .models import Unidade, Desbravador, AvaliacaoSemanal, PontoExtra, Evento 
 from .forms import AvaliacaoForm, DesbravadorForm, EventoForm, PontoExtraForm
 
@@ -105,23 +104,31 @@ def painel_diretoria(request):
             messages.warning(request, "Preencha todos os campos e selecione os desbravadores.")
         return redirect('painel_diretoria')
 
-    # Filtros e Busca
     busca = request.GET.get('busca')
     unidade_filtro = request.GET.get('unidade')
-    
+
     desbravadores = Desbravador.objects.filter(ativo=True).select_related('unidade').order_by('unidade__nome', 'nome_completo')
-    
+
     if busca:
         desbravadores = desbravadores.filter(nome_completo__icontains=busca)
-    
+
     if unidade_filtro:
         desbravadores = desbravadores.filter(unidade_id=unidade_filtro)
 
     unidades = Unidade.objects.all()
+    
+    # Busca otimizada das observações ignorando as vazias
+    observacoes = (
+        AvaliacaoSemanal.objects.select_related('desbravador', 'autor')
+        .exclude(observacao__exact='')
+        .exclude(observacao__isnull=True)
+        .order_by('-data')[:30]
+    )
 
     return render(request, 'core/painel_diretoria.html', {
         'desbravadores': desbravadores,
         'unidades': unidades,
+        'observacoes': observacoes,
         'filtro_atual': int(unidade_filtro) if unidade_filtro and unidade_filtro.isdigit() else None
     })
 
@@ -133,30 +140,31 @@ def relatorio_mensal(request):
         return redirect('dashboard')
 
     hoje = timezone.now()
-    
-    # CORREÇÃO: Removemos 'models.' e usamos Sum/F/Q direto
-    relatorio = Desbravador.objects.filter(ativo=True).annotate(
-        total_avaliacoes=Coalesce(Sum(
-            F('avaliacoes__biblia') + F('avaliacoes__uniforme') + 
-            F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
-            F('avaliacoes__orar') + F('avaliacoes__participacao') +
-            F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') + 
-            F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') +
-            F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') + 
-            F('avaliacoes__ordem_unida'),
-            filter=Q(avaliacoes__data__month=hoje.month, avaliacoes__data__year=hoje.year)
-        ), 0),
-        total_extras=Coalesce(Sum(
-            'pontos_extras__pontos',
-            filter=Q(pontos_extras__data__month=hoje.month, pontos_extras__data__year=hoje.year)
-        ), 0)
+    mes = int(request.GET.get('mes', hoje.month))
+    ano = int(request.GET.get('ano', hoje.year))
+
+    # A matemática pesada para somar os pontos de cada criança no mês
+    total_regular_expr = (
+        F('avaliacoes__biblia') + F('avaliacoes__uniforme') +
+        F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
+        F('avaliacoes__orar') + F('avaliacoes__participacao') +
+        F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') +
+        F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') +
+        F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') +
+        F('avaliacoes__ordem_unida')
+    )
+
+    relatorio = Desbravador.objects.filter(ativo=True).select_related('unidade').annotate(
+        total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
+        total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
     ).annotate(
-        pontuacao_final=F('total_avaliacoes') + F('total_extras')
-    ).order_by('unidade__nome', 'nome_completo')
+        pontuacao_final=F('total_regular') + F('total_extra')
+    ).order_by('-pontuacao_final', 'nome_completo')
 
     return render(request, 'core/relatorio_mensal.html', {
         'relatorio': relatorio,
-        'mes': hoje.strftime('%m/%Y')
+        'mes_selecionado': mes,
+        'ano_selecionado': ano,
     })
 
 # --- 5. OUTRAS VIEWS (Manutenção) ---
@@ -190,7 +198,6 @@ def cadastrar_desbravador(request):
     return render(request, 'core/cadastrar_desbravador.html', {'form': form})
 
 # --- 6. CALENDÁRIO E EVENTOS ---
-@login_required
 @login_required
 def calendario(request):
     # 1. Definir o mês e ano atual (ou o solicitado na URL)
@@ -266,7 +273,7 @@ def calendario(request):
 
     return render(request, 'core/calendario.html', context)
 
-# ADICIONADO: View para cadastrar evento
+# 6.1 ADICIONADO: View para cadastrar evento
 @login_required
 def cadastrar_evento(request):
     # Verifica se pode criar eventos (Diretoria ou Conselheiro)
@@ -293,3 +300,43 @@ def cadastrar_evento(request):
         form = EventoForm(user=request.user)
 
     return render(request, 'core/cadastrar_evento.html', {'form': form})
+
+# 7 - EXPORTAÇÃO DE RELATÓRIOS (CSV)
+@login_required
+def exportar_relatorio_csv(request):
+    if not request.user.is_diretoria:
+        return redirect('dashboard')
+
+    hoje = timezone.now()
+    mes = int(request.GET.get('mes', hoje.month))
+    ano = int(request.GET.get('ano', hoje.year))
+
+    # Configura o arquivo para download como CSV (Excel)
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="pontuacao_dbv_{mes}_{ano}.csv"'
+    
+    # Esse comando mágico forçará o Excel a ler os acentos (UTF-8) corretamente
+    response.write('\ufeff'.encode('utf8')) 
+
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow(['Desbravador', 'Unidade', 'Pontos Regulares', 'Pontos Extras', 'Pontuacao Total'])
+
+    total_regular_expr = (
+        F('avaliacoes__biblia') + F('avaliacoes__uniforme') + F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
+        F('avaliacoes__orar') + F('avaliacoes__participacao') + F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') +
+        F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') + F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') +
+        F('avaliacoes__ordem_unida')
+    )
+
+    desbravadores = Desbravador.objects.filter(ativo=True).select_related('unidade').annotate(
+        total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
+        total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
+    ).annotate(
+        pontuacao_final=F('total_regular') + F('total_extra')
+    ).order_by('unidade__nome', '-pontuacao_final')
+
+    for dbv in desbravadores:
+        unidade_nome = dbv.unidade.nome if dbv.unidade else "Sem Unidade"
+        writer.writerow([dbv.nome_completo, unidade_nome, dbv.total_regular, dbv.total_extra, dbv.pontuacao_final])
+
+    return response

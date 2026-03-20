@@ -1,58 +1,91 @@
 {% extends 'core/base.html' %}
+
 {% block content %}
-<div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
-        <h2 class="mb-0"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>Fechamento Mensal</h2>
-        <div>
-            <a href="{% url 'painel_diretoria' %}" class="btn btn-outline-secondary me-2">Voltar</a>
-            <button onclick="window.print()" class="btn btn-dark">
-                <i class="fas fa-print me-2"></i>Imprimir Relatório
+<style>
+@media print {
+    .navbar, .print-hide, .btn, form { display: none !important; }
+    body { background: #fff !important; }
+    .card, .table, .table-responsive { border: none !important; box-shadow: none !important; }
+}
+</style>
+
+<div class="container-fluid px-0">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4 print-hide">
+        <h2 class="mb-0">
+            <i class="fas fa-chart-line text-primary me-2"></i>
+            Relatório de Desempenho - {{ mes_selecionado|stringformat:"02d" }}/{{ ano_selecionado }}
+        </h2>
+        <div class="d-flex gap-2 w-100 w-md-auto">
+            <a href="{% url 'exportar_relatorio_csv' %}?mes={{ mes_selecionado }}&ano={{ ano_selecionado }}" class="btn btn-success flex-grow-1 shadow-sm">
+                <i class="fas fa-file-excel me-2"></i>Exportar Excel
+            </a>
+            <button onclick="window.print()" class="btn btn-outline-dark shadow-sm">
+                <i class="fas fa-print me-2"></i>Imprimir
             </button>
         </div>
     </div>
 
-    <div class="card shadow border-0">
-        <div class="card-header bg-dark text-white p-3 text-center">
-            <h4 class="mb-0 text-uppercase">Relatório de Pontuação - {{ mes }}</h4>
+    <div class="card border-0 shadow-sm mb-4 print-hide">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Mês</label>
+                    <select name="mes" class="form-select">
+                        <option value="1" {% if mes_selecionado == 1 %}selected{% endif %}>Janeiro</option>
+                        <option value="2" {% if mes_selecionado == 2 %}selected{% endif %}>Fevereiro</option>
+                        <option value="3" {% if mes_selecionado == 3 %}selected{% endif %}>Março</option>
+                        <option value="4" {% if mes_selecionado == 4 %}selected{% endif %}>Abril</option>
+                        <option value="5" {% if mes_selecionado == 5 %}selected{% endif %}>Maio</option>
+                        <option value="6" {% if mes_selecionado == 6 %}selected{% endif %}>Junho</option>
+                        <option value="7" {% if mes_selecionado == 7 %}selected{% endif %}>Julho</option>
+                        <option value="8" {% if mes_selecionado == 8 %}selected{% endif %}>Agosto</option>
+                        <option value="9" {% if mes_selecionado == 9 %}selected{% endif %}>Setembro</option>
+                        <option value="10" {% if mes_selecionado == 10 %}selected{% endif %}>Outubro</option>
+                        <option value="11" {% if mes_selecionado == 11 %}selected{% endif %}>Novembro</option>
+                        <option value="12" {% if mes_selecionado == 12 %}selected{% endif %}>Dezembro</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Ano</label>
+                    <input type="number" name="ano" class="form-control" value="{{ ano_selecionado }}">
+                </div>
+                <div class="col-12 col-md-3">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter me-2"></i>Filtrar</button>
+                </div>
+            </form>
         </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
         <div class="table-responsive">
-            <table class="table table-bordered table-striped align-middle mb-0">
-                <thead class="table-secondary">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
                     <tr>
+                        <th class="text-center" style="width: 70px;">Pos</th>
                         <th>Desbravador</th>
-                        <th>Unidade</th>
-                        <th class="text-center">Avaliações (Semanais)</th>
-                        <th class="text-center">Bônus/Extras</th>
-                        <th class="text-center bg-warning text-dark">Total Geral</th>
+                        <th class="text-center">Unidade</th>
+                        <th class="text-center">Regulares</th>
+                        <th class="text-center">Extras</th>
+                        <th class="text-center">Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for dbv in relatorio %}
                     <tr>
-                        <td class="fw-bold ps-3">{{ dbv.nome_completo }}</td>
-                        <td><span class="badge bg-light text-dark border">{{ dbv.unidade.nome }}</span></td>
-                        <td class="text-center">{{ dbv.total_avaliacoes|default:0 }} pts</td>
-                        <td class="text-center {% if dbv.total_extras < 0 %}text-danger{% else %}text-success{% endif %}">
-                            {{ dbv.total_extras|default:0 }} pts
-                        </td>
-                        <td class="text-center fw-bold bg-light">
-                            {{ dbv.pontuação_final|default:0 }} pts
-                        </td>
+                        <td class="text-center fw-bold">{{ forloop.counter }}</td>
+                        <td class="fw-semibold">{{ dbv.nome_completo }}</td>
+                        <td class="text-center"><span class="badge bg-secondary rounded-pill px-3">{{ dbv.unidade.nome }}</span></td>
+                        <td class="text-center">{{ dbv.total_regular }}</td>
+                        <td class="text-center {% if dbv.total_extra < 0 %}text-danger{% else %}text-success{% endif %}">{{ dbv.total_extra }}</td>
+                        <td class="text-center fw-bold fs-5">{{ dbv.pontuacao_final }}</td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center py-4">Nenhum dado encontrado para este mês.</td>
+                        <td colspan="6" class="text-center py-5 text-muted">Nenhum desbravador pontuado neste período.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
-        </div>
-    </div>
-    
-    <div class="mt-4 d-none d-print-block">
-        <div class="row text-center mt-5">
-            <div class="col-6"><hr class="mx-5"><p>Assinatura do Secretário(a)</p></div>
-            <div class="col-6"><hr class="mx-5"><p>Assinatura do Diretor(a)</p></div>
         </div>
     </div>
 </div>
