@@ -67,4 +67,4 @@ Bash
 python manage.py runserver
 Acesse http://localhost:8000 no seu navegador.
 
-Desenvolvido com dedicação por João Duarte.
+**Desenvolvido com dedicação por [João Duarte](https://joaoaugustoduartexx.github.io/Curriculo/).**
