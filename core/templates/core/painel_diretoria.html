@@ -124,7 +124,7 @@
                                     <small class="text-muted">ID: #{{ dbv.id }}</small>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge rounded-pill bg-secondary px-3">{{ dbv.unidade.nome }}</span>
+                                    <span class="badge rounded-pill {{ dbv.unidade.cor }} px-3">{{ dbv.unidade.nome }}</span>
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group shadow-sm">
@@ -155,7 +155,7 @@
                             <input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item" style="width: 25px; height: 25px;">
                             <div>
                                 <div class="fw-bold text-dark lh-sm mb-1" style="font-size: 0.95rem;">{{ dbv.nome_completo }}</div>
-                                <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ dbv.unidade.nome }}</span>
+                                <span class="badge {{ dbv.unidade.cor }}" style="font-size: 0.7rem;">{{ dbv.unidade.nome }}</span>
                             </div>
                         </div>
                         <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-warning fw-bold text-dark shadow-sm">

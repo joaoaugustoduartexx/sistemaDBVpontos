@@ -74,7 +74,7 @@
                     <tr>
                         <td class="text-center fw-bold">{{ forloop.counter }}</td>
                         <td class="fw-semibold">{{ dbv.nome_completo }}</td>
-                        <td class="text-center"><span class="badge bg-secondary rounded-pill px-3">{{ dbv.unidade.nome }}</span></td>
+                        <td class="text-center"><span class="badge {{ dbv.unidade.cor }} rounded-pill px-3">{{ dbv.unidade.nome }}</span></td>
                         <td class="text-center">{{ dbv.total_regular }}</td>
                         <td class="text-center {% if dbv.total_extra < 0 %}text-danger{% else %}text-success{% endif %}">{{ dbv.total_extra }}</td>
                         <td class="text-center fw-bold fs-5">{{ dbv.pontuacao_final }}</td>
