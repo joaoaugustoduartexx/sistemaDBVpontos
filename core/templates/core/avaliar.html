@@ -94,4 +94,22 @@
         </div>
     </div>
 </div>
+
+<style>
+    /* ITEM 5: Força a quebra de nomes gigantes no celular para não estourar a tela */
+    @media (max-width: 768px) {
+        .card-header .badge {
+            white-space: normal !important;
+            word-wrap: break-word !important;
+            text-align: center;
+            line-height: 1.4;
+            display: block;
+            margin-top: 5px;
+        }
+        .fs-5.fw-bold.text-dark {
+            font-size: 1.1rem !important;
+            word-wrap: break-word !important;
+        }
+    }
+</style>
 {% endblock %}

@@ -2,13 +2,13 @@
 
 {% block content %}
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-    <h2 class="mb-0"><i class="fas fa-crown text-warning me-2"></i>Painel da Diretoria</h2>
+    <h2 class="mb-0 text-center text-md-start w-100"><i class="fas fa-crown text-warning me-2"></i>Painel da Diretoria</h2>
 
-    <div class="d-flex gap-2">
-        <a href="{% url 'relatorio_mensal' %}" class="btn btn-outline-primary shadow-sm">
+    <div class="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto">
+        <a href="{% url 'relatorio_mensal' %}" class="btn btn-outline-primary shadow-sm w-100 w-md-auto fw-bold">
             <i class="fas fa-file-alt me-2"></i>Relatório Mensal
         </a>
-        <a href="{% url 'cadastrar_desbravador' %}" class="btn btn-success shadow-sm">
+        <a href="{% url 'cadastrar_desbravador' %}" class="btn btn-success shadow-sm w-100 w-md-auto fw-bold">
             <i class="fas fa-plus me-2"></i>Novo Membro
         </a>
     </div>
@@ -32,34 +32,37 @@
         </div>
     </div>
     <div class="col-12 col-md-6">
-        <div class="card bg-white text-dark border-0 shadow-sm h-100 d-flex flex-row align-items-center px-3">
-            <div class="flex-grow-1">
-                <h6 class="text-uppercase text-muted small mb-1">Busca e Filtros</h6>
-                <form method="get" class="d-flex gap-2">
-                    <input type="text" name="busca" class="form-control form-control-sm" placeholder="Buscar por nome..." value="{{ request.GET.busca }}">
-
-                    <select name="unidade" class="form-select form-select-sm" onchange="this.form.submit()">
+        <div class="card bg-white text-dark border-0 shadow-sm h-100 p-3">
+            <h6 class="text-uppercase text-muted small mb-3">Busca e Filtros</h6>
+            <form method="get" class="row g-2 align-items-center m-0">
+                <div class="col-12 col-md-5 p-0 pe-md-1">
+                    <input type="text" name="busca" class="form-control" placeholder="Buscar por nome..." value="{{ request.GET.busca }}">
+                </div>
+                <div class="col-12 col-md-5 p-0 px-md-1">
+                    <select name="unidade" class="form-select" onchange="this.form.submit()">
                         <option value="">Todas Unidades</option>
                         {% for uni in unidades %}
                         <option value="{{ uni.id }}" {% if filtro_atual == uni.id %}selected{% endif %}>{{ uni.nome }}</option>
                         {% endfor %}
                     </select>
-                    <button type="submit" class="btn btn-sm btn-dark">Filtrar</button>
-                </form>
-            </div>
+                </div>
+                <div class="col-12 col-md-2 p-0 ps-md-1 mt-2 mt-md-0">
+                    <button type="submit" class="btn btn-dark w-100 fw-bold">Filtrar</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
 <ul class="nav nav-tabs mb-3" id="painelDiretoriaTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab" aria-controls="pontuacao-pane" aria-selected="true">
-            <i class="fas fa-bolt me-2"></i>Pontuação em Massa
+        <button class="nav-link active fw-bold" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab" aria-controls="pontuacao-pane" aria-selected="true">
+            <i class="fas fa-users-cog me-2"></i>Gerenciar Membros
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab" aria-controls="observacoes-pane" aria-selected="false">
-            <i class="fas fa-comment-dots me-2"></i>Observações Recentes
+        <button class="nav-link fw-bold" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab" aria-controls="observacoes-pane" aria-selected="false">
+            <i class="fas fa-comment-dots me-2"></i>Observações
         </button>
     </li>
 </ul>
@@ -69,22 +72,22 @@
         <form method="post" id="formPontuacao">
             {% csrf_token %}
             <div class="card mb-4 border-warning shadow-sm" style="border-width: 2px;">
-                <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
+                <div class="card-header bg-warning text-dark fw-bold d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
                     <span><i class="fas fa-bolt me-2"></i>Ação em Massa (Selecionados)</span>
-                    <span class="badge bg-dark" id="countSelected">0 selecionados</span>
+                    <span class="badge bg-dark fs-6" id="countSelected">0 selecionados</span>
                 </div>
                 <div class="card-body bg-light">
                     <div class="row g-3 align-items-end">
-                        <div class="col-md-6">
+                        <div class="col-12 col-md-6">
                             <label class="form-label fw-bold small text-muted">MOTIVO DA PONTUAÇÃO</label>
                             <input type="text" name="motivo" class="form-control shadow-sm" placeholder="Ex: Participação no Campori">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-12 col-md-3">
                             <label class="form-label fw-bold small text-muted">PONTOS</label>
                             <input type="number" name="pontos" class="form-control shadow-sm" placeholder="Ex: 10 ou -10">
                         </div>
-                        <div class="col-md-3">
-                            <button type="submit" class="btn btn-dark w-100 fw-bold shadow-sm">
+                        <div class="col-12 col-md-3">
+                            <button type="submit" class="btn btn-dark w-100 fw-bold shadow-sm py-2">
                                 <i class="fas fa-save me-2"></i>Aplicar Pontos
                             </button>
                         </div>
@@ -92,7 +95,12 @@
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm">
+            <div class="d-md-none bg-white p-3 rounded shadow-sm mb-3 d-flex align-items-center border">
+                <input type="checkbox" id="selectAllMobile" class="form-check-input mt-0 me-2" style="width: 22px; height: 22px;">
+                <label class="form-check-label fw-bold text-dark" for="selectAllMobile">Selecionar Todos os Desbravadores</label>
+            </div>
+
+            <div class="card border-0 shadow-sm d-none d-md-block">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
@@ -116,18 +124,13 @@
                                     <small class="text-muted">ID: #{{ dbv.id }}</small>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge rounded-pill bg-secondary px-3">
-                                        {{ dbv.unidade.nome }}
-                                    </span>
+                                    <span class="badge rounded-pill bg-secondary px-3">{{ dbv.unidade.nome }}</span>
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group shadow-sm">
-                                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border">
+                                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border fw-bold">
                                             <i class="fas fa-star text-warning me-1"></i> Pontuar
                                         </a>
-                                        <button type="button" class="btn btn-sm btn-white border">
-                                            <i class="fas fa-edit text-primary"></i>
-                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -143,6 +146,30 @@
                     </table>
                 </div>
             </div>
+
+            <div class="d-md-none">
+                {% for dbv in desbravadores %}
+                <div class="card mb-2 shadow-sm border-0 border-start border-primary border-4">
+                    <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center gap-3">
+                            <input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item" style="width: 25px; height: 25px;">
+                            <div>
+                                <div class="fw-bold text-dark lh-sm mb-1" style="font-size: 0.95rem;">{{ dbv.nome_completo }}</div>
+                                <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ dbv.unidade.nome }}</span>
+                            </div>
+                        </div>
+                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-warning fw-bold text-dark shadow-sm">
+                            <i class="fas fa-star"></i>
+                        </a>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-5 text-muted bg-white rounded shadow-sm">
+                    <p class="mb-0">Nenhum desbravador encontrado.</p>
+                </div>
+                {% endfor %}
+            </div>
+
         </form>
     </div>
 
@@ -158,10 +185,10 @@
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
                         <div class="fw-semibold text-dark">{{ obs.desbravador.nome_completo }}</div>
                         <div class="small text-muted">
-                            {{ obs.data|date:"d/m/Y" }} • {{ obs.autor.username }}
+                            <i class="fas fa-calendar-alt me-1"></i> {{ obs.data|date:"d/m/Y" }} • <i class="fas fa-user-edit me-1"></i> {{ obs.autor.username }}
                         </div>
                     </div>
-                    <p class="mb-0 text-secondary">{{ obs.observacao }}</p>
+                    <p class="mb-0 text-secondary fst-italic">"{{ obs.observacao }}"</p>
                 </div>
                 {% endfor %}
             </div>
@@ -177,19 +204,33 @@
 
 <script>
     const selectAll = document.getElementById('selectAll');
+    const selectAllMobile = document.getElementById('selectAllMobile');
     const checkboxes = document.querySelectorAll('.checkbox-item');
     const countDisplay = document.getElementById('countSelected');
 
     function updateCounter() {
         const checkedCount = document.querySelectorAll('.checkbox-item:checked').length;
         countDisplay.textContent = checkedCount + " selecionados";
-        countDisplay.className = checkedCount > 0 ? "badge bg-danger" : "badge bg-dark";
+        countDisplay.className = checkedCount > 0 ? "badge bg-danger fs-6" : "badge bg-dark fs-6";
     }
 
-    selectAll.addEventListener('change', function() {
-        checkboxes.forEach(cb => cb.checked = this.checked);
-        updateCounter();
-    });
+    // Sincroniza checkbox desktop
+    if(selectAll) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(cb => cb.checked = this.checked);
+            if(selectAllMobile) selectAllMobile.checked = this.checked;
+            updateCounter();
+        });
+    }
+
+    // Sincroniza checkbox mobile
+    if(selectAllMobile) {
+        selectAllMobile.addEventListener('change', function() {
+            checkboxes.forEach(cb => cb.checked = this.checked);
+            if(selectAll) selectAll.checked = this.checked;
+            updateCounter();
+        });
+    }
 
     checkboxes.forEach(cb => cb.addEventListener('change', updateCounter));
 
@@ -197,7 +238,7 @@
         var selecionados = document.querySelectorAll('.checkbox-item:checked').length;
         if (selecionados === 0) {
             e.preventDefault();
-            alert('Selecione pelo menos um desbravador para pontuar em massa.');
+            alert('Selecione pelo menos um desbravador para aplicar a pontuação.');
         }
     });
 </script>
