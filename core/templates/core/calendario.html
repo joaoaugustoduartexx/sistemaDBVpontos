@@ -2,115 +2,120 @@
 
 {% block content %}
 <style>
-    .calendar-container { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    .calendar-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 4px; margin-top: 10px; }
-    .calendar-table th { text-align: center; padding: 10px; color: #6c757d; font-weight: bold; text-transform: uppercase; font-size: 0.8rem; }
-    .calendar-table td { height: 120px; vertical-align: top; border: 1px solid #e9ecef; border-radius: 8px; padding: 5px; width: 14.28%; background-color: #fff; transition: all 0.2s; }
-    .calendar-table td:hover { background-color: #f8f9fa; border-color: #dee2e6; }
-    .calendar-table td.today { background-color: #fff8e1; border: 2px solid #ffc107; }
-    .calendar-table td.empty { background-color: transparent; border: none; }
+    .hover-up { transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+    .hover-up:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
     
-    .date-number { font-weight: bold; margin-bottom: 5px; display: block; color: #495057; font-size: 0.9rem; text-align: right; }
-    
-    .evento-badge { 
-        display: block;
-        background-color: #0d6efd; 
-        color: white; 
-        font-size: 0.75rem; 
-        font-weight: 600;
-        padding: 4px 6px; 
-        margin-bottom: 3px; 
-        border-radius: 4px; 
-        text-decoration: none;
-        white-space: nowrap; 
-        overflow: hidden; 
-        text-overflow: ellipsis;
-        transition: 0.2s;
+    .data-badge {
+        background: rgba(13, 110, 253, 0.1);
+        color: #0d6efd;
+        padding: 10px 15px;
+        border-radius: 8px;
+        text-align: center;
+        min-width: 80px;
     }
-    .evento-badge:hover { background-color: #0a58ca; color: white; }
-    .evento-global { background-color: #198754; } /* Verde para eventos globais */
+    .data-badge .dia { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+    .data-badge .mes { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
 </style>
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <a href="?mes={{ ant_mes }}&ano={{ ant_ano }}" class="btn btn-outline-primary shadow-sm">
-            <i class="fas fa-chevron-left"></i> Anterior
-        </a>
-        
-        <h3 class="text-center mb-0 fw-bold text-primary">
-            {{ mes_atual|date:"F Y"|title }}
-        </h3>
-        
-        <a href="?mes={{ prox_mes }}&ano={{ prox_ano }}" class="btn btn-outline-primary shadow-sm">
-            Próximo <i class="fas fa-chevron-right"></i>
+<div class="container mt-4" style="max-width: 900px;">
+    
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body d-flex justify-content-between align-items-center p-3 p-md-4">
+            <a href="?mes={{ ant_mes }}&ano={{ ant_ano }}" class="btn btn-light border text-primary fw-bold shadow-sm">
+                <i class="fas fa-chevron-left me-md-2"></i><span class="d-none d-md-inline"> Anterior</span>
+            </a>
+            
+            <h3 class="text-center mb-0 fw-bold text-dark text-capitalize">
+                {{ mes_atual|date:"F Y" }}
+            </h3>
+            
+            <a href="?mes={{ prox_mes }}&ano={{ prox_ano }}" class="btn btn-light border text-primary fw-bold shadow-sm">
+                <span class="d-none d-md-inline">Próximo </span><i class="fas fa-chevron-right ms-md-2"></i>
+            </a>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end mb-4">
+        <a href="{% url 'cadastrar_evento' %}" class="btn btn-success shadow-sm fw-bold py-2 px-4 w-100 w-md-auto">
+            <i class="fas fa-plus-circle me-2"></i> Agendar Novo Evento
         </a>
     </div>
 
-    <div class="calendar-container">
-        <a href="{% url 'cadastrar_evento' %}" class="btn btn-success mb-3 shadow-sm fw-bold">
-            <i class="fas fa-plus-circle me-2"></i> Agendar Novo Evento
-        </a>
+    <h4 class="fw-bold text-secondary mb-3 border-bottom pb-2">
+        <i class="fas fa-calendar-check me-2 text-primary"></i>Eventos do Mês
+    </h4>
 
-        <div class="table-responsive">
-            <table class="calendar-table">
-                <thead>
-                    <tr>
-                        <th>Seg</th>
-                        <th>Ter</th>
-                        <th>Qua</th>
-                        <th>Qui</th>
-                        <th>Sex</th>
-                        <th>Sáb</th>
-                        <th>Dom</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for semana in semanas %}
-                    <tr>
-                        {% for dia in semana %}
-                            {% if dia %}
-                                <td class="{% if dia.hoje %}today{% endif %}">
-                                    <span class="date-number">{{ dia.dia }}</span>
+    <div class="row g-3" id="eventos-container">
+        {% for semana in semanas %}
+            {% for dia in semana %}
+                {% if dia and dia.eventos %}
+                    {% for evento in dia.eventos %}
+                        <div class="col-12 col-md-6">
+                            <div class="card h-100 border-0 shadow-sm hover-up">
+                                <div class="card-body d-flex align-items-center gap-3">
+                                    <div class="data-badge">
+                                        <div class="dia">{{ dia.dia|stringformat:"02d" }}</div>
+                                        <div class="mes">{{ mes_atual|date:"M" }}</div>
+                                    </div>
                                     
-                                    {% for evento in dia.eventos %}
-                                        <a href="#" class="evento-badge {% if not evento.unidade %}evento-global{% endif %}" 
-                                           data-bs-toggle="modal" 
-                                           data-bs-target="#verEventoModal"
-                                           data-titulo="{{ evento.titulo }}"
-                                           data-data="{{ evento.data_evento|date:'d/m/Y' }}"
-                                           data-descricao="{{ evento.descricao }}">
-                                            {% if not evento.unidade %}★{% endif %} {{ evento.titulo }}
-                                        </a>
-                                    {% endfor %}
-                                </td>
-                            {% else %}
-                                <td class="empty"></td>
-                            {% endif %}
-                        {% endfor %}
-                    </tr>
+                                    <div class="flex-grow-1">
+                                        <h5 class="fw-bold mb-1 text-dark">{{ evento.titulo }}</h5>
+                                        
+                                        <div class="mb-2">
+                                            {% if not evento.unidade %}
+                                                <span class="badge bg-success"><i class="fas fa-globe me-1"></i>Clube Todo</span>
+                                            {% else %}
+                                                <span class="badge {{ evento.unidade.cor }}"><i class="fas fa-flag me-1"></i>{{ evento.unidade.nome }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-footer bg-white border-top-0 pt-0 pb-3 px-3">
+                                    <button class="btn btn-outline-primary w-100 fw-bold shadow-sm" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#verEventoModal"
+                                            data-titulo="{{ evento.titulo }}"
+                                            data-data="{{ dia.dia|stringformat:'02d' }}/{{ mes_atual|date:'m/Y' }}"
+                                            data-descricao="{{ evento.descricao }}">
+                                        Ver Detalhes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     {% endfor %}
-                </tbody>
-            </table>
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    <div id="no-events-msg" class="text-center py-5 d-none bg-white rounded shadow-sm">
+        <div class="opacity-50">
+            <i class="fas fa-calendar-times fa-4x text-muted mb-3"></i>
+            <h4 class="text-muted fw-bold">Agenda Livre!</h4>
+            <p class="text-secondary mb-0">Nenhum evento cadastrado para este mês.</p>
         </div>
     </div>
 </div>
 
 <div class="modal fade" id="verEventoModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
+        <div class="modal-content border-0 shadow-lg">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title fw-bold" id="modalTitulo">Evento</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
                 <div class="mb-3">
-                    <label class="small text-muted text-uppercase fw-bold">Data</label>
-                    <div id="modalData" class="fs-5 fw-bold text-dark"></div>
+                    <label class="small text-muted text-uppercase fw-bold">Data do Evento</label>
+                    <div id="modalData" class="fs-5 fw-bold text-dark"><i class="fas fa-calendar-day text-primary me-2"></i><span></span></div>
                 </div>
                 <div>
-                    <label class="small text-muted text-uppercase fw-bold">Descrição</label>
-                    <div id="modalDescricao" class="p-3 bg-light rounded text-secondary border"></div>
+                    <label class="small text-muted text-uppercase fw-bold mb-1">Descrição</label>
+                    <div id="modalDescricao" class="p-3 bg-light rounded text-secondary border border-light" style="min-height: 80px;"></div>
                 </div>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -118,6 +123,16 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Lógica Inteligente para esconder/mostrar a mensagem de "Nenhum evento"
+        const container = document.getElementById('eventos-container');
+        const emptyMsg = document.getElementById('no-events-msg');
+        
+        // Se o container de eventos estiver vazio (não renderizou nenhum card HTML)
+        if (container.children.length === 0) {
+            emptyMsg.classList.remove('d-none');
+        }
+
+        // Lógica do Modal
         var verEventoModal = document.getElementById('verEventoModal')
         verEventoModal.addEventListener('show.bs.modal', function (event) {
             var button = event.relatedTarget
@@ -126,8 +141,8 @@
             var descricao = button.getAttribute('data-descricao')
             
             verEventoModal.querySelector('#modalTitulo').textContent = titulo
-            verEventoModal.querySelector('#modalData').textContent = data
-            verEventoModal.querySelector('#modalDescricao').textContent = descricao || "Sem descrição disponível."
+            verEventoModal.querySelector('#modalData span').textContent = data
+            verEventoModal.querySelector('#modalDescricao').textContent = descricao || "Nenhuma descrição fornecida para este evento."
         })
     })
 </script>
