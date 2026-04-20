@@ -69,26 +69,31 @@ class AvaliacaoSemanal(models.Model):
         (10, '10 Pontos - Completo'),
     ]
 
+    OPCOES_PONTOS_BOOL = [
+        (0, '0 Pontos - Não fez/Não foi'),
+        (10, '10 Pontos - Completo'),
+    ]
+
     desbravador = models.ForeignKey(Desbravador, on_delete=models.CASCADE, related_name='avaliacoes')
     autor = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True)
     data = models.DateField(default=timezone.now)
     
     # --- ABA 1: REUNIÃO REGULAR ---
-    biblia = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Bíblia")
+    biblia = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Bíblia")
     uniforme = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Uniforme Completo")
-    lenco = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Lenço") 
-    fazer_ideal = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Fazer o Ideal (Voto/Lei)")
-    orar = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Orar")
+    lenco = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Lenço") 
+    fazer_ideal = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Fazer o Ideal (Voto/Lei)")
+    orar = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Orar")
     participacao = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Participação Ativa")
     itens_cartao = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Itens do Cartão/Classe")
 
     # --- ABA 2: IGREJA ---
-    clube_visivel = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Clube Visível (Uniforme na Igreja)")
-    estudo_biblico = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Estudo Bíblico")
-    escola_sabatina = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Escola Sabatina")
+    clube_visivel = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Clube Visível (Uniforme na Igreja)")
+    estudo_biblico = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Estudo Bíblico")
+    escola_sabatina = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Escola Sabatina")
 
     # --- ABA 3: COMUNIDADE ---
-    pequeno_grupo = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Pequeno Grupo")
+    pequeno_grupo = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Pequeno Grupo")
     fanfarra = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Ensaio da Fanfarra")
     ordem_unida = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Ensaio de Ordem Unida")
     
