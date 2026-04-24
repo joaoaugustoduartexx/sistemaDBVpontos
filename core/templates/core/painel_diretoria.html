@@ -35,9 +35,10 @@
         <div class="card bg-white text-dark border-0 shadow-sm h-100 p-3">
             <h6 class="text-uppercase text-muted small mb-3">Busca e Filtros</h6>
             <form method="get" class="row g-2 align-items-center m-0">
-                <div class="col-12 col-md-5 p-0 pe-md-1">
+                <div class="col-12 col-md-4 p-0 pe-md-1">
                     <input type="text" name="busca" class="form-control" placeholder="Buscar por nome..." value="{{ request.GET.busca }}">
                 </div>
+                
                 <div class="col-12 col-md-5 p-0 px-md-1">
                     <select name="unidade" class="form-select" onchange="this.form.submit()">
                         <option value="">Todas Unidades</option>
@@ -46,28 +47,41 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-12 col-md-2 p-0 ps-md-1 mt-2 mt-md-0">
-                    <button type="submit" class="btn btn-dark w-100 fw-bold">Filtrar</button>
+                
+                <div class="col-12 col-md-3 p-0 ps-md-1 mt-2 mt-md-0">
+                    <button type="submit" class="btn btn-dark w-100 fw-bold text-nowrap py-2">Filtrar</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<ul class="nav nav-tabs mb-3" id="painelDiretoriaTabs" role="tablist">
+<ul class="nav nav-tabs mb-3 flex-column flex-md-row gap-2 gap-md-0" id="painelDiretoriaTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active fw-bold" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab" aria-controls="pontuacao-pane" aria-selected="true">
-            <i class="fas fa-users-cog me-2"></i>Gerenciar Membros
+        <button class="nav-link active fw-bold w-100" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab" aria-controls="pontuacao-pane" aria-selected="true">
+            <i class="fas fa-users-cog me-2"></i>Membros
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab" aria-controls="observacoes-pane" aria-selected="false">
+        <button class="nav-link fw-bold w-100" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab" aria-controls="observacoes-pane" aria-selected="false">
             <i class="fas fa-comment-dots me-2"></i>Observações
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold w-100" id="pendentes-tab" data-bs-toggle="tab" data-bs-target="#pendentes-pane" type="button" role="tab" aria-controls="pendentes-pane" aria-selected="false">
+            <i class="fas fa-clock text-warning me-2"></i>Aprovações
+            {% if pendentes.count > 0 %}<span class="badge bg-danger ms-1">{{ pendentes.count }}</span>{% endif %}
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link fw-bold w-100" id="acessos-tab" data-bs-toggle="tab" data-bs-target="#acessos-pane" type="button" role="tab" aria-controls="acessos-pane" aria-selected="false">
+            <i class="fas fa-shield-alt text-danger me-2"></i>Acessos
         </button>
     </li>
 </ul>
 
 <div class="tab-content" id="painelDiretoriaTabsContent">
+    
     <div class="tab-pane fade show active" id="pontuacao-pane" role="tabpanel" aria-labelledby="pontuacao-tab" tabindex="0">
         <form method="post" id="formPontuacao">
             {% csrf_token %}
@@ -200,6 +214,95 @@
             {% endif %}
         </div>
     </div>
+
+    <div class="tab-pane fade" id="pendentes-pane" role="tabpanel" aria-labelledby="pendentes-tab" tabindex="0">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light border-bottom text-center text-md-start">
+                <h5 class="mb-0 text-dark fw-semibold">Cadastros Pendentes de Aprovação</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Novo Membro</th>
+                            <th class="text-center">Unidade</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pendentes %}
+                        <tr>
+                            <td class="ps-3 py-3">
+                                <div class="fw-bold">{{ p.nome_completo }}</div>
+                                <small class="text-muted">Nasc: {{ p.data_nascimento|date:"d/m/Y" }}</small>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge {{ p.unidade.cor }}">{{ p.unidade.nome }}</span>
+                            </td>
+                            <td class="text-center">
+                                <a href="{% url 'aprovar_membro' p.id %}" class="btn btn-sm btn-success fw-bold">
+                                    <i class="fas fa-check me-1"></i> Aprovar
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center py-5 text-muted"><i class="fas fa-check-circle fa-2x mb-2 opacity-50"></i><br>Nenhuma aprovação pendente.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="acessos-pane" role="tabpanel" aria-labelledby="acessos-tab" tabindex="0">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-light border-bottom text-center text-md-start">
+                <h5 class="mb-0 text-dark fw-semibold">Gerenciamento de Logins</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Usuário</th>
+                            <th class="text-center">Cargo</th>
+                            <th class="text-center">Segurança</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usu in todos_usuarios %}
+                        <tr>
+                            <td class="ps-3 py-3">
+                                <div class="fw-bold text-dark">{{ usu.username }}</div>
+                                <small class="text-muted">{{ usu.get_full_name|default:"Sem nome cadastrado" }}</small>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge border text-dark bg-light">{{ usu.get_cargo_display }}</span>
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group shadow-sm">
+                                    <a href="{% url 'toggle_acesso' usu.id %}" class="btn btn-sm btn-white border">
+                                        {% if usu.is_active %}
+                                            <i class="fas fa-lock-open text-success fa-lg" title="Acesso Liberado (Clique para Bloquear)"></i>
+                                        {% else %}
+                                            <i class="fas fa-lock text-danger fa-lg" title="Acesso Bloqueado (Clique para Liberar)"></i>
+                                        {% endif %}
+                                    </a>
+                                    <a href="{% url 'reset_senha_diretoria' usu.id %}" class="btn btn-sm btn-white border" onclick="return confirm('Tem certeza que deseja resetar a senha deste usuário para dbv@123?');" title="Resetar Senha para padrão">
+                                        <i class="fas fa-key text-warning"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer bg-white border-top-0 pt-3">
+                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Ao clicar na chave amarela, a senha do usuário será resetada para o padrão: <strong>dbv@123</strong></small>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -214,7 +317,6 @@
         countDisplay.className = checkedCount > 0 ? "badge bg-danger fs-6" : "badge bg-dark fs-6";
     }
 
-    // Sincroniza checkbox desktop
     if(selectAll) {
         selectAll.addEventListener('change', function() {
             checkboxes.forEach(cb => cb.checked = this.checked);
@@ -223,7 +325,6 @@
         });
     }
 
-    // Sincroniza checkbox mobile
     if(selectAllMobile) {
         selectAllMobile.addEventListener('change', function() {
             checkboxes.forEach(cb => cb.checked = this.checked);

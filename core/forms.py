@@ -71,16 +71,35 @@ class AvaliacaoForm(forms.ModelForm):
 
 # --- 3. FORMULÁRIO DE CADASTRO DE DESBRAVADOR ---
 class DesbravadorForm(forms.ModelForm):
-    class Meta:
-        model = Desbravador
-        fields = ['nome_completo', 'data_nascimento', 'unidade', 'ativo', 'anotacoes_gerais']
-        widgets = {
-            'nome_completo': forms.TextInput(attrs={'class': 'form-control'}),
-            'data_nascimento': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'unidade': forms.Select(attrs={'class': 'form-select'}),
-            'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'anotacoes_gerais': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
-        }
+    # ... (Meta e widgets iguais ao anterior)
+
+    def __init__(self, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        if 'anotacoes_gerais' in self.fields:
+            self.fields['anotacoes_gerais'].required = False
+
+        # LOGICA DE VERIFICAÇÃO ROBUSTA
+        # Verificamos se o usuário existe e se é diretoria OU admin
+        e_diretoria = False
+        if self.user:
+            if self.user.is_superuser or getattr(self.user, 'is_diretoria', False):
+                e_diretoria = True
+
+        if not e_diretoria:
+            # Se cair aqui, o sistema te viu como Conselheiro
+            if 'unidade' in self.fields:
+                self.fields['unidade'].required = False
+                self.fields['unidade'].widget.attrs['disabled'] = 'disabled'
+        else:
+            # Se cair aqui, o sistema te viu como Diretoria
+            # Garantimos que o campo está habilitado e limpo de qualquer trava
+            if 'unidade' in self.fields:
+                self.fields['unidade'].required = True
+                self.fields['unidade'].disabled = False # Força habilitação nativa
+                if 'disabled' in self.fields['unidade'].widget.attrs:
+                    del self.fields['unidade'].widget.attrs['disabled']
 
 # --- 4. FORMULÁRIO DE EVENTO (CORRIGIDO O ERRO DO USER) ---
 class EventoForm(forms.ModelForm):
@@ -93,8 +112,6 @@ class EventoForm(forms.ModelForm):
             'descricao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Detalhes do evento...'}),
             'unidade': forms.Select(attrs={'class': 'form-select'}),
         }
-
-    # AQUI ESTAVA O ERRO: Mudamos para usar kwargs.pop('user')
     def __init__(self, *args, **kwargs):
         user = kwargs.pop('user', None) # O user é extraído aqui
         super(EventoForm, self).__init__(*args, **kwargs) # O resto (request.POST) vai para o super

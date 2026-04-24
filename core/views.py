@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from django import forms
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Sum, Count, Q, F
 from django.db.models.functions import Coalesce
@@ -10,8 +11,11 @@ from django.http import HttpResponse, JsonResponse
 from django.conf import settings
 import calendar
 import csv
-from .models import Unidade, Desbravador, AvaliacaoSemanal, PontoExtra, Evento 
+from .models import Unidade, Desbravador, AvaliacaoSemanal, PontoExtra, Evento, Usuario
 from .forms import AvaliacaoForm, DesbravadorForm, EventoForm, PontoExtraForm
+# IMPORTAÇÕES NOVAS PARA A SENHA:
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 
 # --- CONFIGURAÇÃO PWA ---
 def manifest(request):
@@ -43,7 +47,7 @@ def dashboard(request):
             filter=Q(membros__pontos_extras__data__month=mes_atual, membros__pontos_extras__data__year=ano_atual)
         ), 0),
         # CORREÇÃO: total_membros para não conflitar com o related_name
-        total_membros=Count('membros', filter=Q(membros__ativo=True), distinct=True)
+        total_membros=Count('membros', filter=Q(membros__ativo=True, membros__aprovado=True), distinct=True)
     ).order_by('-pontos')
 
     return render(request, 'core/dashboard.html', {'ranking': ranking, 'mes': hoje.strftime('%B/%Y')})
@@ -59,12 +63,11 @@ def avaliar_membro(request, id_desbravador):
         return redirect('dashboard')
 
     if request.method == 'POST':
-        # Passamos user=request.user para o formulário
         form = AvaliacaoForm(request.POST, user=request.user)
         if form.is_valid():
             avaliacao = form.save(commit=False)
             avaliacao.desbravador = membro
-            avaliacao.autor = request.user # Salva quem fez a avaliação
+            avaliacao.autor = request.user 
             avaliacao.save()
             messages.success(request, f"Pontuação de {membro.nome_completo} salva com sucesso!")
             
@@ -107,7 +110,8 @@ def painel_diretoria(request):
     busca = request.GET.get('busca')
     unidade_filtro = request.GET.get('unidade')
 
-    desbravadores = Desbravador.objects.filter(ativo=True).select_related('unidade').order_by('unidade__nome', 'nome_completo')
+    # CORREÇÃO AQUI: Lista principal de membros só exibe os já aprovados
+    desbravadores = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').order_by('unidade__nome', 'nome_completo')
 
     if busca:
         desbravadores = desbravadores.filter(nome_completo__icontains=busca)
@@ -117,7 +121,6 @@ def painel_diretoria(request):
 
     unidades = Unidade.objects.all()
     
-    # Busca otimizada das observações ignorando as vazias
     observacoes = (
         AvaliacaoSemanal.objects.select_related('desbravador', 'autor')
         .exclude(observacao__exact='')
@@ -125,10 +128,17 @@ def painel_diretoria(request):
         .order_by('-data')[:30]
     )
 
+    todos_usuarios = Usuario.objects.all().order_by('username')
+    
+    # NOVA VARIÁVEL: Lista de aprovações pendentes
+    pendentes = Desbravador.objects.filter(ativo=True, aprovado=False).select_related('unidade').order_by('nome_completo')
+
     return render(request, 'core/painel_diretoria.html', {
         'desbravadores': desbravadores,
         'unidades': unidades,
         'observacoes': observacoes,
+        'todos_usuarios': todos_usuarios,
+        'pendentes': pendentes,
         'filtro_atual': int(unidade_filtro) if unidade_filtro and unidade_filtro.isdigit() else None
     })
 
@@ -143,7 +153,6 @@ def relatorio_mensal(request):
     mes = int(request.GET.get('mes', hoje.month))
     ano = int(request.GET.get('ano', hoje.year))
 
-    # A matemática pesada para somar os pontos de cada criança no mês
     total_regular_expr = (
         F('avaliacoes__biblia') + F('avaliacoes__uniforme') +
         F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
@@ -154,7 +163,8 @@ def relatorio_mensal(request):
         F('avaliacoes__ordem_unida')
     )
 
-    relatorio = Desbravador.objects.filter(ativo=True).select_related('unidade').annotate(
+    # Só aparece no relatório se estiver aprovado
+    relatorio = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
         total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
         total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
     ).annotate(
@@ -175,37 +185,52 @@ def minha_unidade(request):
         messages.warning(request, "Você não é conselheiro de nenhuma unidade.")
         return redirect('dashboard')
         
-    membros = Desbravador.objects.filter(unidade=unidade, ativo=True)
+    membros = Desbravador.objects.filter(unidade=unidade, ativo=True, aprovado=True)
     return render(request, 'core/minha_unidade.html', {'unidade': unidade, 'membros': membros})
 
 @login_required
 def cadastrar_desbravador(request):
+    # Detecta se é Diretoria ou Superuser
+    sou_diretor = request.user.is_diretoria or request.user.is_superuser
+    
+    initial_data = {}
+    if not sou_diretor and request.user.unidade_responsavel:
+        initial_data['unidade'] = request.user.unidade_responsavel.id
+
     if request.method == 'POST':
-        form = DesbravadorForm(request.POST)
+        form = DesbravadorForm(request.POST, user=request.user, initial=initial_data)
+        
         if form.is_valid():
             dbv = form.save(commit=False)
-            if not request.user.is_diretoria and request.user.unidade_responsavel:
+            
+            if sou_diretor:
+                dbv.aprovado = True  # DIRETORIA NÃO PRECISA DE APROVAÇÃO
+            else:
+                dbv.aprovado = False # CONSELHEIRO PRECISA
                 dbv.unidade = request.user.unidade_responsavel
+            
             dbv.save()
-            messages.success(request, "Desbravador cadastrado com sucesso!")
-            return redirect('minha_unidade')
+            
+            if dbv.aprovado:
+                messages.success(request, f"{dbv.nome_completo} cadastrado e aprovado!")
+            else:
+                messages.warning(request, f"Cadastro de {dbv.nome_completo} enviado para aprovação.")
+            
+            return redirect('dashboard')
+        else:
+            messages.error(request, f"Erro de validação: {form.errors}")
     else:
-        initial_data = {}
-        if not request.user.is_diretoria and request.user.unidade_responsavel:
-            initial_data['unidade'] = request.user.unidade_responsavel
-        form = DesbravadorForm(initial=initial_data)
+        form = DesbravadorForm(user=request.user, initial=initial_data)
         
     return render(request, 'core/cadastrar_desbravador.html', {'form': form})
 
 # --- 6. CALENDÁRIO E EVENTOS ---
 @login_required
 def calendario(request):
-    # 1. Definir o mês e ano atual (ou o solicitado na URL)
     hoje = date.today()
     ano = int(request.GET.get('ano', hoje.year))
     mes = int(request.GET.get('mes', hoje.month))
 
-    # Ajuste de navegação (Anterior/Próximo)
     if mes > 12:
         mes = 1
         ano += 1
@@ -213,23 +238,16 @@ def calendario(request):
         mes = 12
         ano -= 1
 
-    # 2. Buscar eventos
     if request.user.is_diretoria:
-        eventos = Evento.objects.filter(
-            data_evento__year=ano, 
-            data_evento__month=mes
-        )
+        eventos = Evento.objects.filter(data_evento__year=ano, data_evento__month=mes)
     else:
         unidade_usuario = request.user.unidade_responsavel
         eventos = Evento.objects.filter(
             Q(unidade=unidade_usuario) | Q(unidade__isnull=True),
-            data_evento__year=ano, 
-            data_evento__month=mes
+            data_evento__year=ano, data_evento__month=mes
         )
 
-    # 3. Montar a estrutura do calendário
     cal = calendar.Calendar()
-    # weeks é uma lista de listas: [[(1, 0), (2, 1)...], ...] onde (dia, dia_semana)
     semanas_cruas = cal.monthdays2calendar(ano, mes)
     
     semanas = []
@@ -237,9 +255,8 @@ def calendario(request):
         dias_semana = []
         for dia, dia_semana in semana:
             if dia == 0:
-                dias_semana.append(None) # Dia vazio (mês anterior/próximo)
+                dias_semana.append(None) 
             else:
-                # Pega os eventos deste dia específico
                 eventos_do_dia = eventos.filter(data_evento__day=dia)
                 dias_semana.append({
                     'dia': dia,
@@ -248,7 +265,6 @@ def calendario(request):
                 })
         semanas.append(dias_semana)
 
-    # Dados para os botões de navegação
     data_atual = date(ano, mes, 1)
     mes_anterior = mes - 1
     ano_anterior = ano
@@ -270,13 +286,10 @@ def calendario(request):
         'ant_mes': mes_anterior,
         'ant_ano': ano_anterior,
     }
-
     return render(request, 'core/calendario.html', context)
 
-# 6.1 ADICIONADO: View para cadastrar evento
 @login_required
 def cadastrar_evento(request):
-    # Verifica se pode criar eventos (Diretoria ou Conselheiro)
     if not request.user.is_diretoria and not request.user.unidade_responsavel:
         messages.error(request, "Você não tem permissão para criar eventos.")
         return redirect('calendario')
@@ -286,13 +299,8 @@ def cadastrar_evento(request):
         if form.is_valid():
             evento = form.save(commit=False)
             evento.autor = request.user
-            
-            # Se não for diretoria, força a unidade do usuário
             if not request.user.is_diretoria:
                 evento.unidade = request.user.unidade_responsavel
-            
-            # Se for diretoria e o campo unidade vier vazio, ele salva como NULL (Global)
-            
             evento.save()
             messages.success(request, "Evento cadastrado com sucesso!")
             return redirect('calendario')
@@ -311,11 +319,8 @@ def exportar_relatorio_csv(request):
     mes = int(request.GET.get('mes', hoje.month))
     ano = int(request.GET.get('ano', hoje.year))
 
-    # Configura o arquivo para download como CSV (Excel)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="pontuacao_dbv_{mes}_{ano}.csv"'
-    
-    # Esse comando mágico forçará o Excel a ler os acentos (UTF-8) corretamente
     response.write('\ufeff'.encode('utf8')) 
 
     writer = csv.writer(response, delimiter=';')
@@ -328,7 +333,7 @@ def exportar_relatorio_csv(request):
         F('avaliacoes__ordem_unida')
     )
 
-    desbravadores = Desbravador.objects.filter(ativo=True).select_related('unidade').annotate(
+    desbravadores = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
         total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
         total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
     ).annotate(
@@ -340,3 +345,66 @@ def exportar_relatorio_csv(request):
         writer.writerow([dbv.nome_completo, unidade_nome, dbv.total_regular, dbv.total_extra, dbv.pontuacao_final])
 
     return response
+
+# --- 8. GERENCIAMENTO DE ACESSOS E SENHAS ---
+
+@login_required
+def alterar_senha(request):
+    if request.method == 'POST':
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)  
+            messages.success(request, 'Sua senha foi atualizada com sucesso!')
+            return redirect('dashboard')
+        else:
+            messages.error(request, 'Por favor, corrija os erros abaixo.')
+    else:
+        form = PasswordChangeForm(request.user)
+    
+    return render(request, 'core/alterar_senha.html', {'form': form})
+
+@login_required
+def toggle_acesso(request, user_id):
+    if not request.user.is_diretoria:
+        messages.error(request, "Acesso Negado.")
+        return redirect('dashboard')
+    
+    usuario_alvo = get_object_or_404(Usuario, id=user_id)
+    
+    if usuario_alvo == request.user:
+        messages.warning(request, "Você não pode bloquear o próprio acesso!")
+        return redirect('painel_diretoria')
+        
+    usuario_alvo.is_active = not usuario_alvo.is_active
+    usuario_alvo.save()
+    
+    status = "liberado" if usuario_alvo.is_active else "bloqueado"
+    messages.success(request, f"O acesso de {usuario_alvo.username} foi {status}!")
+    return redirect('painel_diretoria')
+
+@login_required
+def reset_senha_diretoria(request, user_id):
+    if not request.user.is_diretoria:
+        messages.error(request, "Acesso Negado.")
+        return redirect('dashboard')
+        
+    usuario = get_object_or_404(Usuario, id=user_id)
+    usuario.set_password('dbv@123')
+    usuario.save()
+    
+    messages.success(request, f"Senha de {usuario.username} resetada para o padrão: dbv@123")
+    return redirect('painel_diretoria')
+
+# NOVA VIEW: APROVAÇÃO DE MEMBRO
+@login_required
+def aprovar_membro(request, id_dbv):
+    if not request.user.is_diretoria:
+        messages.error(request, "Acesso negado.")
+        return redirect('dashboard')
+    
+    membro = get_object_or_404(Desbravador, id=id_dbv)
+    membro.aprovado = True
+    membro.save()
+    messages.success(request, f"O cadastro de {membro.nome_completo} foi aprovado com sucesso!")
+    return redirect('painel_diretoria')

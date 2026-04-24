@@ -56,6 +56,7 @@ class Desbravador(models.Model):
     data_nascimento = models.DateField()
     unidade = models.ForeignKey(Unidade, on_delete=models.PROTECT, related_name='membros')
     ativo = models.BooleanField(default=True)
+    aprovado = models.BooleanField(default=False, verbose_name="Aprovado pela Diretoria")
     anotacoes_gerais = models.TextField(blank=True, null=True)
 
     def __str__(self):
