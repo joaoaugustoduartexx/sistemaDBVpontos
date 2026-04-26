@@ -10,7 +10,12 @@
                     <i class="fas fa-user-plus fa-2x"></i>
                 </div>
                 <h4 class="fw-bold text-dark mb-0">Novo Desbravador</h4>
-                <p class="text-muted">Adicionando à unidade <strong>{{ user.unidade_responsavel.nome }}</strong></p>
+                
+                {% if not user.is_diretoria and user.unidade_responsavel %}
+                    <p class="text-muted">Adicionando à unidade <strong>{{ user.unidade_responsavel.nome }}</strong></p>
+                {% else %}
+                    <p class="text-muted">Cadastro via Diretoria</p>
+                {% endif %}
             </div>
 
             <div class="card-body p-4">
@@ -27,6 +32,14 @@
                         {{ form.data_nascimento }}
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-secondary">Unidade</label>
+                        {{ form.unidade }}
+                        {% if form.unidade.errors %}
+                            <div class="text-danger small mt-1 fw-bold">{{ form.unidade.errors }}</div>
+                        {% endif %}
+                    </div>
+
                     <div class="mb-4">
                         <label class="form-label fw-bold text-secondary">Anotações (Alergias, remédios, etc)</label>
                         {{ form.anotacoes_gerais }}
@@ -36,7 +49,7 @@
                         <button type="submit" class="btn btn-success btn-lg fw-bold shadow-sm">
                             <i class="fas fa-save me-2"></i> CADASTRAR MEMBRO
                         </button>
-                        <a href="{% url 'minha_unidade' %}" class="btn btn-link text-muted text-decoration-none text-center">
+                        <a href="{% url 'dashboard' %}" class="btn btn-link text-muted text-decoration-none text-center">
                             Cancelar e Voltar
                         </a>
                     </div>

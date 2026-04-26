@@ -71,35 +71,66 @@ class AvaliacaoForm(forms.ModelForm):
 
 # --- 3. FORMULÁRIO DE CADASTRO DE DESBRAVADOR ---
 class DesbravadorForm(forms.ModelForm):
-    # ... (Meta e widgets iguais ao anterior)
-
+    class Meta:
+        model = Desbravador
+        fields = ['nome_completo', 'data_nascimento', 'unidade', 'ativo', 'anotacoes_gerais']
+        widgets = {
+            'nome_completo': forms.TextInput(attrs={'class': 'form-control'}),
+            'data_nascimento': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'unidade': forms.Select(attrs={'class': 'form-select'}),
+            'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'anotacoes_gerais': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+    
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
         
         if 'anotacoes_gerais' in self.fields:
             self.fields['anotacoes_gerais'].required = False
+            self.fields['anotacoes_gerais'].widget.attrs.update({
+                'placeholder': 'Observações médicas, alergias, etc. (Opcional)'
+            })
 
-        # LOGICA DE VERIFICAÇÃO ROBUSTA
-        # Verificamos se o usuário existe e se é diretoria OU admin
-        e_diretoria = False
+        # LOGICA DE VERIFICAÇÃO ROBUSTA DA DIRETORIA
+        sou_diretor = False
         if self.user:
             if self.user.is_superuser or getattr(self.user, 'is_diretoria', False):
-                e_diretoria = True
+                sou_diretor = True
 
-        if not e_diretoria:
-            # Se cair aqui, o sistema te viu como Conselheiro
+        if not sou_diretor:
+            # Conselheiro: Trava a unidade e desobriga a validação no form
             if 'unidade' in self.fields:
                 self.fields['unidade'].required = False
                 self.fields['unidade'].widget.attrs['disabled'] = 'disabled'
         else:
-            # Se cair aqui, o sistema te viu como Diretoria
-            # Garantimos que o campo está habilitado e limpo de qualquer trava
+            # Diretoria / Admin: Libera total
             if 'unidade' in self.fields:
                 self.fields['unidade'].required = True
-                self.fields['unidade'].disabled = False # Força habilitação nativa
+                self.fields['unidade'].disabled = False
                 if 'disabled' in self.fields['unidade'].widget.attrs:
                     del self.fields['unidade'].widget.attrs['disabled']
+
+    # O INTERCEPTADOR DE VALIDAÇÃO
+    def clean_unidade(self):
+        sou_diretor = False
+        if self.user:
+            if self.user.is_superuser or getattr(self.user, 'is_diretoria', False):
+                sou_diretor = True
+
+        unidade = self.cleaned_data.get('unidade')
+
+        if not sou_diretor:
+            # Se for conselheiro, injetamos a unidade do perfil dele à força
+            if self.user and self.user.unidade_responsavel:
+                return self.user.unidade_responsavel
+            else:
+                raise forms.ValidationError("Você não está vinculado a nenhuma unidade.")
+        
+        # Se for diretoria, ele PRECISA ter selecionado uma unidade na tela
+        if not unidade:
+            raise forms.ValidationError("Como Diretor, você precisa selecionar uma unidade na lista.")
+        return unidade
 
 # --- 4. FORMULÁRIO DE EVENTO (CORRIGIDO O ERRO DO USER) ---
 class EventoForm(forms.ModelForm):
