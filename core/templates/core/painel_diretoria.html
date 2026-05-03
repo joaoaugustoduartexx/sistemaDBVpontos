@@ -16,7 +16,7 @@
 
 <div class="row mb-4 g-3">
     <div class="col-6 col-md-3">
-        <div class="card bg-primary text-white border-0 shadow-sm h-100">
+        <div class="card bg-primary text-white border-0 shadow-sm h-100" style="border-radius: 12px;">
             <div class="card-body">
                 <h6 class="text-uppercase small opacity-75">Membros Ativos</h6>
                 <h2 class="fw-bold mb-0">{{ desbravadores.count }}</h2>
@@ -24,7 +24,7 @@
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="card bg-success text-white border-0 shadow-sm h-100">
+        <div class="card bg-success text-white border-0 shadow-sm h-100" style="border-radius: 12px;">
             <div class="card-body">
                 <h6 class="text-uppercase small opacity-75">Unidades</h6>
                 <h2 class="fw-bold mb-0">{{ unidades.count }}</h2>
@@ -32,13 +32,12 @@
         </div>
     </div>
     <div class="col-12 col-md-6">
-        <div class="card bg-white text-dark border-0 shadow-sm h-100 p-3">
-            <h6 class="text-uppercase text-muted small mb-3">Busca e Filtros</h6>
+        <div class="card bg-white text-dark border-0 shadow-sm h-100 p-3" style="border-radius: 12px;">
+            <h6 class="text-uppercase text-muted small mb-2">Busca e Filtros</h6>
             <form method="get" class="row g-2 align-items-center m-0">
                 <div class="col-12 col-md-4 p-0 pe-md-1">
-                    <input type="text" name="busca" class="form-control" placeholder="Buscar por nome..." value="{{ request.GET.busca }}">
+                    <input type="text" name="busca" class="form-control" placeholder="Buscar nome..." value="{{ request.GET.busca }}">
                 </div>
-                
                 <div class="col-12 col-md-5 p-0 px-md-1">
                     <select name="unidade" class="form-select" onchange="this.form.submit()">
                         <option value="">Todas Unidades</option>
@@ -47,42 +46,40 @@
                         {% endfor %}
                     </select>
                 </div>
-                
-                <div class="col-12 col-md-3 p-0 ps-md-1 mt-2 mt-md-0">
-                    <button type="submit" class="btn btn-dark w-100 fw-bold text-nowrap py-2">Filtrar</button>
+                <div class="col-12 col-md-3 p-0 ps-md-1">
+                    <button type="submit" class="btn btn-dark w-100 fw-bold">Filtrar</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<ul class="nav nav-tabs mb-3 flex-column flex-md-row gap-2 gap-md-0" id="painelDiretoriaTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active fw-bold w-100" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab" aria-controls="pontuacao-pane" aria-selected="true">
-            <i class="fas fa-users-cog me-2"></i>Membros
+<ul class="nav nav-pills mb-4 flex-column flex-md-row gap-2" id="painelDiretoriaTabs" role="tablist">
+    <li class="nav-item flex-fill text-center" role="presentation">
+        <button class="nav-link active w-100 fw-bold border" id="pontuacao-tab" data-bs-toggle="tab" data-bs-target="#pontuacao-pane" type="button" role="tab">
+            <i class="fas fa-users-cog me-1"></i> Membros
         </button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold w-100" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab" aria-controls="observacoes-pane" aria-selected="false">
-            <i class="fas fa-comment-dots me-2"></i>Observações
+    <li class="nav-item flex-fill text-center" role="presentation">
+        <button class="nav-link w-100 fw-bold border" id="observacoes-tab" data-bs-toggle="tab" data-bs-target="#observacoes-pane" type="button" role="tab">
+            <i class="fas fa-comment-dots me-1"></i> Obs.
         </button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold w-100" id="pendentes-tab" data-bs-toggle="tab" data-bs-target="#pendentes-pane" type="button" role="tab" aria-controls="pendentes-pane" aria-selected="false">
-            <i class="fas fa-clock text-warning me-2"></i>Aprovações
+    <li class="nav-item flex-fill text-center" role="presentation">
+        <button class="nav-link w-100 fw-bold border" id="pendentes-tab" data-bs-toggle="tab" data-bs-target="#pendentes-pane" type="button" role="tab">
+            <i class="fas fa-clock me-1"></i> Aprovar
             {% if pendentes.count > 0 %}<span class="badge bg-danger ms-1">{{ pendentes.count }}</span>{% endif %}
         </button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link fw-bold w-100" id="acessos-tab" data-bs-toggle="tab" data-bs-target="#acessos-pane" type="button" role="tab" aria-controls="acessos-pane" aria-selected="false">
-            <i class="fas fa-shield-alt text-danger me-2"></i>Acessos
+    <li class="nav-item flex-fill text-center" role="presentation">
+        <button class="nav-link w-100 fw-bold border" id="acessos-tab" data-bs-toggle="tab" data-bs-target="#acessos-pane" type="button" role="tab">
+            <i class="fas fa-shield-alt me-1"></i> Logins
         </button>
     </li>
 </ul>
 
 <div class="tab-content" id="painelDiretoriaTabsContent">
-    
-    <div class="tab-pane fade show active" id="pontuacao-pane" role="tabpanel" aria-labelledby="pontuacao-tab" tabindex="0">
+    <div class="tab-pane fade show active" id="pontuacao-pane" role="tabpanel" tabindex="0">
         <form method="post" id="formPontuacao">
             {% csrf_token %}
             <div class="card mb-4 border-warning shadow-sm" style="border-width: 2px;">
@@ -93,17 +90,15 @@
                 <div class="card-body bg-light">
                     <div class="row g-3 align-items-end">
                         <div class="col-12 col-md-6">
-                            <label class="form-label fw-bold small text-muted">MOTIVO DA PONTUAÇÃO</label>
-                            <input type="text" name="motivo" class="form-control shadow-sm" placeholder="Ex: Participação no Campori">
+                            <label class="form-label fw-bold small text-muted">MOTIVO</label>
+                            <input type="text" name="motivo" class="form-control" placeholder="Ex: Participação no Campori">
                         </div>
                         <div class="col-12 col-md-3">
                             <label class="form-label fw-bold small text-muted">PONTOS</label>
-                            <input type="number" name="pontos" class="form-control shadow-sm" placeholder="Ex: 10 ou -10">
+                            <input type="number" name="pontos" class="form-control" placeholder="Ex: 10 ou -10">
                         </div>
                         <div class="col-12 col-md-3">
-                            <button type="submit" class="btn btn-dark w-100 fw-bold shadow-sm py-2">
-                                <i class="fas fa-save me-2"></i>Aplicar Pontos
-                            </button>
+                            <button type="submit" class="btn btn-dark w-100 fw-bold"><i class="fas fa-save me-2"></i>Aplicar</button>
                         </div>
                     </div>
                 </div>
@@ -111,7 +106,7 @@
 
             <div class="d-md-none bg-white p-3 rounded shadow-sm mb-3 d-flex align-items-center border">
                 <input type="checkbox" id="selectAllMobile" class="form-check-input mt-0 me-2" style="width: 22px; height: 22px;">
-                <label class="form-check-label fw-bold text-dark" for="selectAllMobile">Selecionar Todos os Desbravadores</label>
+                <label class="form-check-label fw-bold" for="selectAllMobile">Selecionar Todos</label>
             </div>
 
             <div class="card border-0 shadow-sm d-none d-md-block">
@@ -119,40 +114,22 @@
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 50px;" class="ps-3">
-                                    <input type="checkbox" id="selectAll" class="form-check-input">
-                                </th>
+                                <th style="width: 50px;" class="ps-3"><input type="checkbox" id="selectAll" class="form-check-input"></th>
                                 <th>Desbravador</th>
                                 <th class="text-center">Unidade</th>
-                                <th class="text-center">Ações Sênior</th>
+                                <th class="text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for dbv in desbravadores %}
                             <tr>
-                                <td class="ps-3">
-                                    <input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item">
-                                </td>
+                                <td class="ps-3"><input type="checkbox" name="selecionados" value="{{ dbv.id }}" class="form-check-input checkbox-item"></td>
                                 <td>
                                     <div class="fw-bold">{{ dbv.nome_completo }}</div>
-                                    <small class="text-muted">ID: #{{ dbv.id }}</small>
                                 </td>
+                                <td class="text-center"><span class="badge rounded-pill {{ dbv.unidade.cor }} px-3">{{ dbv.unidade.nome }}</span></td>
                                 <td class="text-center">
-                                    <span class="badge rounded-pill {{ dbv.unidade.cor }} px-3">{{ dbv.unidade.nome }}</span>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group shadow-sm">
-                                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border fw-bold">
-                                            <i class="fas fa-star text-warning me-1"></i> Pontuar
-                                        </a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center py-5 text-muted">
-                                    <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
-                                    <p class="mb-0">Nenhum desbravador encontrado.</p>
+                                    <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-white border fw-bold text-warning"><i class="fas fa-star"></i> Pontuar</a>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -172,94 +149,27 @@
                                 <span class="badge {{ dbv.unidade.cor }}" style="font-size: 0.7rem;">{{ dbv.unidade.nome }}</span>
                             </div>
                         </div>
-                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-warning fw-bold text-dark shadow-sm">
-                            <i class="fas fa-star"></i>
-                        </a>
+                        <a href="{% url 'avaliar_membro' dbv.id %}" class="btn btn-sm btn-warning fw-bold text-dark shadow-sm"><i class="fas fa-star"></i></a>
                     </div>
-                </div>
-                {% empty %}
-                <div class="text-center py-5 text-muted bg-white rounded shadow-sm">
-                    <p class="mb-0">Nenhum desbravador encontrado.</p>
                 </div>
                 {% endfor %}
             </div>
-
         </form>
     </div>
 
-    <div class="tab-pane fade" id="observacoes-pane" role="tabpanel" aria-labelledby="observacoes-tab" tabindex="0">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light border-bottom">
-                <h5 class="mb-0 text-dark fw-semibold">Últimas 30 observações registradas</h5>
-            </div>
-            {% if observacoes %}
-            <div class="list-group list-group-flush">
-                {% for obs in observacoes %}
-                <div class="list-group-item py-3">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
-                        <div class="fw-semibold text-dark">{{ obs.desbravador.nome_completo }}</div>
-                        <div class="small text-muted">
-                            <i class="fas fa-calendar-alt me-1"></i> {{ obs.data|date:"d/m/Y" }} • <i class="fas fa-user-edit me-1"></i> {{ obs.autor.username }}
-                        </div>
-                    </div>
-                    <p class="mb-0 text-secondary fst-italic">"{{ obs.observacao }}"</p>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="card-body text-center py-5">
-                <i class="fas fa-comment-slash fa-2x text-muted mb-3"></i>
-                <p class="mb-0 text-muted">Ainda não há observações recentes para exibir.</p>
-            </div>
-            {% endif %}
+    <div class="tab-pane fade" id="observacoes-pane" role="tabpanel" tabindex="0">
         </div>
-    </div>
-
-    <div class="tab-pane fade" id="pendentes-pane" role="tabpanel" aria-labelledby="pendentes-tab" tabindex="0">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light border-bottom text-center text-md-start">
-                <h5 class="mb-0 text-dark fw-semibold">Cadastros Pendentes de Aprovação</h5>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-3">Novo Membro</th>
-                            <th class="text-center">Unidade</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in pendentes %}
-                        <tr>
-                            <td class="ps-3 py-3">
-                                <div class="fw-bold">{{ p.nome_completo }}</div>
-                                <small class="text-muted">Nasc: {{ p.data_nascimento|date:"d/m/Y" }}</small>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge {{ p.unidade.cor }}">{{ p.unidade.nome }}</span>
-                            </td>
-                            <td class="text-center">
-                                <a href="{% url 'aprovar_membro' p.id %}" class="btn btn-sm btn-success fw-bold">
-                                    <i class="fas fa-check me-1"></i> Aprovar
-                                </a>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="3" class="text-center py-5 text-muted"><i class="fas fa-check-circle fa-2x mb-2 opacity-50"></i><br>Nenhuma aprovação pendente.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+    
+    <div class="tab-pane fade" id="pendentes-pane" role="tabpanel" tabindex="0">
         </div>
-    </div>
 
-    <div class="tab-pane fade" id="acessos-pane" role="tabpanel" aria-labelledby="acessos-tab" tabindex="0">
+    <div class="tab-pane fade" id="acessos-pane" role="tabpanel" tabindex="0">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-light border-bottom text-center text-md-start">
                 <h5 class="mb-0 text-dark fw-semibold">Gerenciamento de Logins</h5>
             </div>
-            <div class="table-responsive">
+            
+            <div class="table-responsive d-none d-md-block">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
@@ -273,39 +183,73 @@
                         <tr>
                             <td class="ps-3 py-3">
                                 <div class="fw-bold text-dark">{{ usu.username }}</div>
-                                <small class="text-muted">{{ usu.get_full_name|default:"Sem nome cadastrado" }}</small>
+                                <small class="text-muted">{{ usu.get_full_name|default:"Sem nome" }}</small>
                             </td>
                             <td class="text-center">
                                 <span class="badge border text-dark bg-light">{{ usu.get_cargo_display }}</span>
                             </td>
                             <td class="text-center">
-                                <div class="btn-group shadow-sm">
-                                    <a href="{% url 'toggle_acesso' usu.id %}" class="btn btn-sm btn-white border">
-                                        {% if usu.is_active %}
-                                            <i class="fas fa-lock-open text-success fa-lg" title="Acesso Liberado (Clique para Bloquear)"></i>
-                                        {% else %}
-                                            <i class="fas fa-lock text-danger fa-lg" title="Acesso Bloqueado (Clique para Liberar)"></i>
-                                        {% endif %}
-                                    </a>
-                                    <a href="{% url 'reset_senha_diretoria' usu.id %}" class="btn btn-sm btn-white border" onclick="return confirm('Tem certeza que deseja resetar a senha deste usuário para dbv@123?');" title="Resetar Senha para padrão">
-                                        <i class="fas fa-key text-warning"></i>
-                                    </a>
-                                </div>
+                                {% if usu.is_superuser %}
+                                    <span class="badge bg-danger text-white"><i class="fas fa-shield-alt me-1"></i> Intocável (Admin)</span>
+                                {% else %}
+                                    <div class="btn-group shadow-sm">
+                                        <a href="{% url 'toggle_acesso' usu.id %}" class="btn btn-sm btn-white border">
+                                            {% if usu.is_active %}
+                                                <i class="fas fa-lock-open text-success fa-lg" title="Bloquear"></i>
+                                            {% else %}
+                                                <i class="fas fa-lock text-danger fa-lg" title="Liberar"></i>
+                                            {% endif %}
+                                        </a>
+                                        <a href="{% url 'reset_senha_diretoria' usu.id %}" class="btn btn-sm btn-white border" onclick="return confirm('Resetar senha para dbv@123?');">
+                                            <i class="fas fa-key text-warning"></i>
+                                        </a>
+                                    </div>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <div class="card-footer bg-white border-top-0 pt-3">
-                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Ao clicar na chave amarela, a senha do usuário será resetada para o padrão: <strong>dbv@123</strong></small>
+
+            <div class="d-md-none list-group list-group-flush">
+                {% for usu in todos_usuarios %}
+                <div class="list-group-item py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold text-dark fs-6">{{ usu.username }}</div>
+                            <div class="small text-muted mb-1">{{ usu.get_full_name|default:"-" }}</div>
+                            <span class="badge border text-dark bg-light">{{ usu.get_cargo_display }}</span>
+                        </div>
+                        
+                        <div>
+                            {% if usu.is_superuser %}
+                                <span class="badge bg-danger text-white p-2"><i class="fas fa-shield-alt"></i> Admin</span>
+                            {% else %}
+                                <div class="d-flex flex-column gap-2">
+                                    <a href="{% url 'toggle_acesso' usu.id %}" class="btn btn-sm border {% if usu.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                                        {% if usu.is_active %} Bloquear {% else %} Liberar {% endif %}
+                                    </a>
+                                    <a href="{% url 'reset_senha_diretoria' usu.id %}" class="btn btn-sm btn-warning fw-bold text-dark" onclick="return confirm('Resetar senha?');">
+                                        Resetar Senha
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="card-footer bg-white pt-3">
+                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Senhas resetadas voltam ao padrão: <strong>dbv@123</strong>. Administradores Master não podem ser alterados por aqui.</small>
             </div>
         </div>
     </div>
-
 </div>
 
 <script>
+    // Seus scripts de selecionar todos continuam os mesmos aqui!
     const selectAll = document.getElementById('selectAll');
     const selectAllMobile = document.getElementById('selectAllMobile');
     const checkboxes = document.querySelectorAll('.checkbox-item');
@@ -317,30 +261,8 @@
         countDisplay.className = checkedCount > 0 ? "badge bg-danger fs-6" : "badge bg-dark fs-6";
     }
 
-    if(selectAll) {
-        selectAll.addEventListener('change', function() {
-            checkboxes.forEach(cb => cb.checked = this.checked);
-            if(selectAllMobile) selectAllMobile.checked = this.checked;
-            updateCounter();
-        });
-    }
-
-    if(selectAllMobile) {
-        selectAllMobile.addEventListener('change', function() {
-            checkboxes.forEach(cb => cb.checked = this.checked);
-            if(selectAll) selectAll.checked = this.checked;
-            updateCounter();
-        });
-    }
-
+    if(selectAll) { selectAll.addEventListener('change', function() { checkboxes.forEach(cb => cb.checked = this.checked); if(selectAllMobile) selectAllMobile.checked = this.checked; updateCounter(); }); }
+    if(selectAllMobile) { selectAllMobile.addEventListener('change', function() { checkboxes.forEach(cb => cb.checked = this.checked); if(selectAll) selectAll.checked = this.checked; updateCounter(); }); }
     checkboxes.forEach(cb => cb.addEventListener('change', updateCounter));
-
-    document.getElementById('formPontuacao').addEventListener('submit', function(e) {
-        var selecionados = document.querySelectorAll('.checkbox-item:checked').length;
-        if (selecionados === 0) {
-            e.preventDefault();
-            alert('Selecione pelo menos um desbravador para aplicar a pontuação.');
-        }
-    });
 </script>
 {% endblock %}
