@@ -4,20 +4,27 @@ Django settings for setup project.
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Carrega as variáveis ocultas do arquivo .env
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-x=6fcs&sfob@ap52p3o6)0d&+ec4))82hr%un=fyyqt18=p4#q'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = ['joaocintraduarte.pythonanywhere.com', 'localhost', '127.0.0.1']
+# Puxa a lista de hosts do .env e separa por vírgula
+hosts = os.getenv('ALLOWED_HOSTS')
+ALLOWED_HOSTS = hosts.split(',') if hosts else []
 
 # Application definition
 INSTALLED_APPS = [
+    'jazzmin', # JAZZMIN SEMPRE NO TOPO!
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -81,6 +88,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles') # Obrigatório para o PythonAnywhere
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 # --- CONFIGURAÇÕES DO SISTEMA DBV ---
