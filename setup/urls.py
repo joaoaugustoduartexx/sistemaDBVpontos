@@ -54,4 +54,7 @@ urlpatterns = [
 
     # Rota do Exportar CSV
     path('relatorio/exportar/', exportar_relatorio_csv, name='exportar_relatorio_csv'),
+    
+    # Rota do Push Notification
+    path('webpush/', include('webpush.urls')),
 ]

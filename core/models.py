@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.conf import settings
 
 # 1. UNIDADES
 # Em core/models.py
@@ -185,3 +186,15 @@ class ConquistaMembro(models.Model):
     def __str__(self):
         item = self.classe.nome if self.classe else self.especialidade.nome
         return f"{self.desbravador.nome_completo} - {item}"
+    
+class NotificacaoManual(models.Model):
+    titulo = models.CharField(max_length=100, verbose_name="Título do Alerta")
+    mensagem = models.TextField(verbose_name="Conteúdo da Mensagem")
+    destinatarios = models.ManyToManyField(settings.AUTH_USER_MODEL, verbose_name="Enviar para os Usuários")
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name="Disparado em")
+
+    class Meta:
+        verbose_name = "Notificação Manual"
+        verbose_name_plural = "Notificações Manuais"
+    def __str__(self):
+        return self.titulo
