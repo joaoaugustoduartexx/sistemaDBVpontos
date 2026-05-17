@@ -8,8 +8,12 @@
             <h2 class="fw-bold text-primary" style="color: #0d47a1 !important;">🏆 Ranking de Unidades</h2>
             <p class="text-muted mb-2">Desempenho atualizado do mês {{ mes }}</p>
             
-            {% webpush_button with_class="btn btn-outline-primary btn-sm rounded-pill shadow-sm mt-2" %}
-        </div>
+            <div class="alert mt-3 d-inline-block shadow-sm rounded-4 border-0" role="alert" style="background-color: #e3f2fd; max-width: 350px;">
+                <i class="fas fa-bell mb-2" style="color: #0d47a1; font-size: 1.5rem;"></i>
+                <p class="mb-2 text-dark" style="font-size: 0.85rem;">Para receber os comunicados e alertas da diretoria em tempo real, ative as notificações:</p>
+                {% webpush_button with_class="btn btn-primary btn-sm rounded-pill shadow-sm fw-bold px-4" %}
+            </div>
+            </div>
 
         <div class="card overflow-hidden d-none d-md-block shadow-sm">
             <div class="card-body p-0">
