@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'core', # Seu app principal
+    'webpush', # Para notificações push
 ]
 
 MIDDLEWARE = [
@@ -99,3 +100,10 @@ AUTH_USER_MODEL = 'core.Usuario'
 # Redirecionamentos de Login
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
+
+# --- CONFIGURAÇÕES DE NOTIFICAÇÃO PUSH ---
+WEBPUSH_SETTINGS = {
+    "VAPID_PUBLIC_KEY": os.getenv('VAPID_PUBLIC_KEY'),
+    "VAPID_PRIVATE_KEY": os.getenv('VAPID_PRIVATE_KEY'),
+    "VAPID_ADMIN_EMAIL": "joaocintraduarte@gmail.com"
+}

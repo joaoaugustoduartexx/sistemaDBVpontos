@@ -1,10 +1,9 @@
 {% load webpush_notifications %}
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Sistema DBV</title>
     
     <link rel="manifest" href="{% url 'manifest' %}">
@@ -38,8 +37,9 @@
             box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
             z-index: 1030;
             justify-content: space-around;
-            padding: 10px 0;
-            padding-bottom: env(safe-area-inset-bottom, 10px); /* Previne corte no iPhone */
+            /* Separamos o padding para não dar conflito com o calc() */
+            padding-top: 10px; 
+            padding-bottom: calc(10px + env(safe-area-inset-bottom)); 
         }
         .bottom-nav a {
             text-align: center;
@@ -55,9 +55,10 @@
         .bottom-nav a.active, .bottom-nav a:hover { color: #0d47a1; font-weight: bold; }
 
         @media (max-width: 991px) {
-            .main-container { margin-top: 15px; padding: 0 15px; margin-bottom: 80px; /* Espaço pro menu inferior */ }
+            /* Somamos o safe-area aqui também para a rolagem não cortar no final da página */
+            .main-container { margin-top: 15px; padding: 0 15px; margin-bottom: calc(80px + env(safe-area-inset-bottom)); }
             .bottom-nav { display: flex; } /* Mostra no celular */
-            footer { margin-bottom: 70px; } /* Evita que o footer fique atrás da barra */
+            footer { margin-bottom: calc(70px + env(safe-area-inset-bottom)); } 
             
             select, input[type="text"], input[type="number"], input[type="date"], input[type="password"], textarea {
                 width: 100% !important; height: 48px !important; font-size: 16px !important; border-radius: 8px;
@@ -84,6 +85,10 @@
                         {% if user.is_diretoria %}
                         <li class="nav-item"><a class="nav-link fw-bold text-warning bg-dark rounded px-2 ms-2" href="{% url 'painel_diretoria' %}"><i class="fas fa-crown me-1"></i> Diretoria</a></li>
                         {% endif %}
+
+                        <li class="nav-item ms-3">
+                            {% webpush_button with_class="btn btn-sm btn-outline-light rounded-pill" %}
+                        </li>
 
                         <li class="nav-item dropdown ms-3">
                             <a class="nav-link dropdown-toggle text-white" href="#" data-bs-toggle="dropdown"><i class="fas fa-user-circle me-1"></i> {{ user.username|title }}</a>
