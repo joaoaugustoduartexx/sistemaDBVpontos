@@ -86,9 +86,12 @@
                         <li class="nav-item"><a class="nav-link fw-bold text-warning bg-dark rounded px-2 ms-2" href="{% url 'painel_diretoria' %}"><i class="fas fa-crown me-1"></i> Diretoria</a></li>
                         {% endif %}
 
-                        <li class="nav-item ms-3">
-                            {% webpush_button with_class="btn btn-sm btn-outline-light rounded-pill" %}
-                        </li>
+   {% if user.is_diretoria %}
+                        <li class="nav-item"><a class="nav-link fw-bold text-warning bg-dark rounded px-2 ms-2" href="{% url 'painel_diretoria' %}"><i class="fas fa-crown me-1"></i> Diretoria</a></li>
+                        {% endif %}
+
+                        <li class="nav-item dropdown ms-3">
+                            <a class="nav-link dropdown-toggle text-white" href="#" data-bs-toggle="dropdown"><i class="fas fa-user-circle me-1"></i> {{ user.username|title }}</a>
 
                         <li class="nav-item dropdown ms-3">
                             <a class="nav-link dropdown-toggle text-white" href="#" data-bs-toggle="dropdown"><i class="fas fa-user-circle me-1"></i> {{ user.username|title }}</a>
