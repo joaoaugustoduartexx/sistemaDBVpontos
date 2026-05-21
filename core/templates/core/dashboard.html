@@ -95,16 +95,23 @@
             // Se o navegador suporta notificação e a permissão já foi concedida
             if ("Notification" in window && Notification.permission === "granted") {
                 if (caixaPush) {
-                    caixaPush.style.display = "none"; // Esconde a caixa inteira
+                    // Arranca a classe que força a exibição e adiciona a classe de ocultar do Bootstrap
+                    caixaPush.classList.remove("d-inline-block");
+                    caixaPush.classList.add("d-none"); 
                 }
             }
         }
 
-        // Verifica assim que a página carrega
+        // 1. Verifica assim que a página carrega
         verificarPush();
 
-        // Verifica quando a tela voltar a ter foco (exato momento que o popup de permissão da Apple se fecha)
+        // 2. Verifica quando a tela voltar a ter foco (quando o popup fecha)
         window.addEventListener("focus", verificarPush);
+        
+        // 3. Verifica 1 segundo após qualquer clique (garantia extra)
+        document.addEventListener("click", function() {
+            setTimeout(verificarPush, 1000);
+        });
     });
 </script>
 {% endblock %}
