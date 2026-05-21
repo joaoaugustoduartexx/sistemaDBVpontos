@@ -15,7 +15,8 @@ from core.views import (
     alterar_senha,
     toggle_acesso,
     reset_senha_diretoria,
-    aprovar_membro  # <--- CORREÇÃO AQUI: Importamos a nova função!
+    aprovar_membro,
+    recusar_membro, # <--- CORREÇÃO AQUI: Importamos a nova função!
 )
 
 urlpatterns = [
@@ -43,7 +44,8 @@ urlpatterns = [
     path('alterar-senha/', alterar_senha, name='alterar_senha'),
     path('diretoria/acesso/<int:user_id>/', toggle_acesso, name='toggle_acesso'),
     path('diretoria/reset-senha/<int:user_id>/', reset_senha_diretoria, name='reset_senha_diretoria'),
-    path('diretoria/aprovar/<int:id_dbv>/', aprovar_membro, name='aprovar_membro'), # <--- A rota que precisa da importação acima
+    path('diretoria/aprovar/<int:id_dbv>/', aprovar_membro, name='aprovar_membro'),
+    path('diretoria/recusar/<int:id_dbv>/', recusar_membro, name='recusar_membro'),
     
     # Rotas do Calendário
     path('calendario/', calendario, name='calendario'),

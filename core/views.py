@@ -408,3 +408,16 @@ def aprovar_membro(request, id_dbv):
     membro.save()
     messages.success(request, f"O cadastro de {membro.nome_completo} foi aprovado com sucesso!")
     return redirect('painel_diretoria')
+
+@login_required
+def recusar_membro(request, id_dbv):
+    if not request.user.is_diretoria:
+        messages.error(request, "Acesso negado.")
+        return redirect('dashboard')
+    
+    membro = get_object_or_404(Desbravador, id=id_dbv)
+    nome = membro.nome_completo
+    membro.delete() # Exclui o cadastro pendente do banco
+    
+    messages.success(request, f"O cadastro de {nome} foi recusado e excluído do sistema.")
+    return redirect('painel_diretoria')
