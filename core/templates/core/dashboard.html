@@ -9,7 +9,7 @@
             <h2 class="fw-bold text-primary" style="color: #0d47a1 !important;">🏆 Ranking de Unidades</h2>
             <p class="text-muted mb-2">Desempenho atualizado do mês {{ mes }}</p>
             
-            <div class="alert mt-3 d-inline-block shadow-sm rounded-4 border-0" role="alert" style="background-color: #e3f2fd; max-width: 350px;">
+            <div id= "Caixa de notificaçao" class="alert mt-3 d-inline-block shadow-sm rounded-4 border-0" role="alert" style="background-color: #e3f2fd; max-width: 350px;">
                 <i class="fas fa-bell mb-2" style="color: #0d47a1; font-size: 1.5rem;"></i>
                 <p class="mb-2 text-dark" style="font-size: 0.85rem;">Para receber os comunicados e alertas da diretoria em tempo real, ative as notificações:</p>
                 {% webpush_button with_class="btn btn-primary btn-sm rounded-pill shadow-sm fw-bold px-4" %}
@@ -86,4 +86,27 @@
 
     </div>
 </div>
+</div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var caixaPush = document.getElementById("caixa-notificacao");
+        
+        function verificarPush() {
+            // Se o navegador suporta notificação e a permissão já foi concedida
+            if ("Notification" in window && Notification.permission === "granted") {
+                if (caixaPush) {
+                    caixaPush.style.display = "none"; // Esconde a caixa inteira
+                }
+            }
+        }
+
+        // Verifica assim que a página carrega
+        verificarPush();
+
+        // Verifica quando a tela voltar a ter foco (exato momento que o popup de permissão da Apple se fecha)
+        window.addEventListener("focus", verificarPush);
+    });
+</script>
 {% endblock %}
