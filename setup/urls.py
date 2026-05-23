@@ -16,47 +16,50 @@ from core.views import (
     toggle_acesso,
     reset_senha_diretoria,
     aprovar_membro,
-    recusar_membro, # <--- CORREÇÃO AQUI: Importamos a nova função!
+    recusar_membro, 
+    api_notificacoes,           
+    marcar_notificacao_lida,
+    marcar_todas_lidas
 )
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     
-    # --- PREPARAÇÃO PARA A FUTURA LANDING PAGE ---
     path('', dashboard, name='landing_temporaria'),
     path('dashboard/', dashboard, name='dashboard'),
     
-    # Rotas PWA
+    # PWA
     path('manifest.json', manifest, name='manifest'),
     path('sw.js', service_worker, name='service_worker'),
     
-    # Rotas do Conselheiro
+    # Conselheiro
     path('minha-unidade/', minha_unidade, name='minha_unidade'),
     path('avaliar/<int:id_desbravador>/', avaliar_membro, name='avaliar_membro'),
     path('cadastrar-dbv/', cadastrar_desbravador, name='cadastrar_desbravador'),
     
-    # Rotas da Diretoria
+    # Diretoria
     path('diretoria/', painel_diretoria, name='painel_diretoria'),
     path('relatorio/', relatorio_mensal, name='relatorio_mensal'),
     path('diretoria/relatorio/', relatorio_mensal, name='relatorio_mensal_legacy'),
     
-    # Rotas de Gestão de Acesso, Senha e Aprovação
+    # Senhas e Acessos
     path('alterar-senha/', alterar_senha, name='alterar_senha'),
     path('diretoria/acesso/<int:user_id>/', toggle_acesso, name='toggle_acesso'),
     path('diretoria/reset-senha/<int:user_id>/', reset_senha_diretoria, name='reset_senha_diretoria'),
     path('diretoria/aprovar/<int:id_dbv>/', aprovar_membro, name='aprovar_membro'),
     path('diretoria/recusar/<int:id_dbv>/', recusar_membro, name='recusar_membro'),
     
-    # Rotas do Calendário
+    # Calendário
     path('calendario/', calendario, name='calendario'),
     path('calendario/novo/', cadastrar_evento, name='cadastrar_evento'),
     
-    # Login/Logout
+    # Autenticação
     path('accounts/', include('django.contrib.auth.urls')),
-
-    # Rota do Exportar CSV
     path('relatorio/exportar/', exportar_relatorio_csv, name='exportar_relatorio_csv'),
-    
-    # Rota do Push Notification
     path('webpush/', include('webpush.urls')),
+
+    # API Hub de Avisos In-App
+    path('notificacoes/api/', api_notificacoes, name='api_notificacoes'),
+    path('notificacoes/ler/<int:id_notificacao>/', marcar_notificacao_lida, name='marcar_notificacao_lida'),
+    path('notificacoes/ler-todas/', marcar_todas_lidas, name='marcar_todas_lidas'),
 ]

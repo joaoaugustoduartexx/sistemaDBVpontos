@@ -2,12 +2,12 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.conf import settings
+from django.db.models.signals import m2m_changed
+from django.dispatch import receiver
+from webpush import send_user_notification
 
 # 1. UNIDADES
-# Em core/models.py
-
 class Unidade(models.Model):
-    # Lista de Cores disponíveis para escolha
     CORES_CHOICES = [
         ('bg-primary', 'Azul (Padrão)'),
         ('bg-danger', 'Vermelho'),
@@ -15,9 +15,9 @@ class Unidade(models.Model):
         ('bg-warning text-dark', 'Amarelo'),
         ('bg-info text-dark', 'Ciano/Azul Claro'),
         ('bg-dark', 'Preto/Cinza Escuro'),
-        ('bg-rosa', 'Rosa (Safira)'),       # Vamos criar no CSS
-        ('bg-roxo', 'Roxo'),               # Vamos criar no CSS
-        ('bg-laranja', 'Laranja'),         # Vamos criar no CSS
+        ('bg-rosa', 'Rosa (Safira)'),       
+        ('bg-roxo', 'Roxo'),               
+        ('bg-laranja', 'Laranja'),         
     ]
 
     nome = models.CharField(max_length=50)
@@ -44,8 +44,6 @@ class Usuario(AbstractUser):
     cargo = models.CharField(max_length=4, choices=Cargos.choices, default=Cargos.CONSELHEIRO)
     status_aprovado = models.BooleanField(default=False, verbose_name="Acesso Aprovado?")
     unidade_responsavel = models.ForeignKey(Unidade, on_delete=models.SET_NULL, null=True, blank=True, related_name='conselheiros')
-    
-    # NOVO CAMPO REAL (Substituindo o antigo @property)
     is_diretoria = models.BooleanField(default=False, verbose_name="É Diretoria?")
 
     def __str__(self):
@@ -80,7 +78,6 @@ class AvaliacaoSemanal(models.Model):
     autor = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True)
     data = models.DateField(default=timezone.now)
     
-    # --- ABA 1: REUNIÃO REGULAR ---
     biblia = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Bíblia")
     uniforme = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Uniforme Completo")
     lenco = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Lenço") 
@@ -89,12 +86,10 @@ class AvaliacaoSemanal(models.Model):
     participacao = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Participação Ativa")
     itens_cartao = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Itens do Cartão/Classe")
 
-    # --- ABA 2: IGREJA ---
     clube_visivel = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Clube Visível (Uniforme na Igreja)")
     estudo_biblico = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Estudo Bíblico")
     escola_sabatina = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Escola Sabatina")
 
-    # --- ABA 3: COMUNIDADE ---
     pequeno_grupo = models.IntegerField(choices=OPCOES_PONTOS_BOOL, default=0, verbose_name="Pequeno Grupo")
     fanfarra = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Ensaio da Fanfarra")
     ordem_unida = models.IntegerField(choices=OPCOES_PONTOS, default=0, verbose_name="Ensaio de Ordem Unida")
@@ -142,10 +137,7 @@ class Evento(models.Model):
     titulo = models.CharField(max_length=100, verbose_name="Título")
     descricao = models.TextField(blank=True, null=True, verbose_name="Descrição")
     data_evento = models.DateField(verbose_name="Data do Evento")
-    
-    # Campo opcional para permitir eventos globais
     unidade = models.ForeignKey(Unidade, on_delete=models.CASCADE, related_name='eventos', null=True, blank=True)
-    
     autor = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True)
 
     def __str__(self):
@@ -198,3 +190,46 @@ class NotificacaoManual(models.Model):
         verbose_name_plural = "Notificações Manuais"
     def __str__(self):
         return self.titulo
+
+# 9. CENTRAL DE AVISOS NO APP
+class NotificacaoInApp(models.Model):
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='notificacoes_inapp')
+    titulo = models.CharField(max_length=100)
+    mensagem = models.TextField()
+    lida = models.BooleanField(default=False)
+    data_criacao = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Aviso do Sistema"
+        verbose_name_plural = "Avisos do Sistema"
+        ordering = ['-data_criacao']
+
+    def __str__(self):
+        return f"[{'LIDA' if self.lida else 'NOVA'}] {self.usuario.username} - {self.titulo}"
+
+# --- SINAL AUTOMATIZADOR ROBUSTO ---
+@receiver(m2m_changed, sender=NotificacaoManual.destinatarios.through)
+def processar_disparo_notificacao(sender, instance, action, pk_set, **kwargs):
+    """ Sempre que associar utilizadores à NotificacaoManual, dispara o ecossistema """
+    if action == "post_add":
+        for user_id in pk_set:
+            user = Usuario.objects.get(id=user_id)
+            
+            # 1. Alimenta automaticamente a Central de Avisos (Sininho)
+            NotificacaoInApp.objects.get_or_create(
+                usuario=user,
+                titulo=instance.titulo,
+                mensagem=instance.mensagem,
+                data_criacao=instance.criado_em
+            )
+            
+            # 2. Configura o payload do Push com a URL de auto-abertura
+            payload = {
+                "head": instance.titulo,
+                "body": instance.mensagem,
+                "url": "/dashboard/?open_notif=1"
+            }
+            try:
+                send_user_notification(user=user, payload=payload, ttl=1000)
+            except Exception:
+                pass
