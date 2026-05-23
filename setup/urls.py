@@ -17,6 +17,7 @@ from core.views import (
     reset_senha_diretoria,
     aprovar_membro,
     recusar_membro, 
+    mural_notificacoes, # <--- IMPORTAÇÃO DA NOVA TELA
     api_notificacoes,           
     marcar_notificacao_lida,
     marcar_todas_lidas
@@ -58,7 +59,8 @@ urlpatterns = [
     path('relatorio/exportar/', exportar_relatorio_csv, name='exportar_relatorio_csv'),
     path('webpush/', include('webpush.urls')),
 
-    # API Hub de Avisos In-App
+    # Central de Notificações
+    path('notificacoes/', mural_notificacoes, name='mural_notificacoes'), # <--- NOVA ROTA NATIVA
     path('notificacoes/api/', api_notificacoes, name='api_notificacoes'),
     path('notificacoes/ler/<int:id_notificacao>/', marcar_notificacao_lida, name='marcar_notificacao_lida'),
     path('notificacoes/ler-todas/', marcar_todas_lidas, name='marcar_todas_lidas'),

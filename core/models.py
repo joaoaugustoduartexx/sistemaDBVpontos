@@ -210,12 +210,10 @@ class NotificacaoInApp(models.Model):
 # --- SINAL AUTOMATIZADOR ROBUSTO ---
 @receiver(m2m_changed, sender=NotificacaoManual.destinatarios.through)
 def processar_disparo_notificacao(sender, instance, action, pk_set, **kwargs):
-    """ Sempre que associar utilizadores à NotificacaoManual, dispara o ecossistema """
     if action == "post_add":
         for user_id in pk_set:
             user = Usuario.objects.get(id=user_id)
             
-            # 1. Alimenta automaticamente a Central de Avisos (Sininho)
             NotificacaoInApp.objects.get_or_create(
                 usuario=user,
                 titulo=instance.titulo,
@@ -223,11 +221,11 @@ def processar_disparo_notificacao(sender, instance, action, pk_set, **kwargs):
                 data_criacao=instance.criado_em
             )
             
-            # 2. Configura o payload do Push com a URL de auto-abertura
+            # MUDANÇA SÊNIOR: Aponta direto para a rota de notificações cheia
             payload = {
                 "head": instance.titulo,
                 "body": instance.mensagem,
-                "url": "/dashboard/?open_notif=1"
+                "url": "/notificacoes/"
             }
             try:
                 send_user_notification(user=user, payload=payload, ttl=1000)

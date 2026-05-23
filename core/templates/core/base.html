@@ -72,8 +72,8 @@
             <div class="collapse navbar-collapse d-none d-lg-block" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if user.is_authenticated %}
-                        <li class="nav-item"><a class="nav-link" href="{% url 'dashboard' %}">Ranking</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{% url 'calendario' %}">Calendário</a></li>
+                        <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active fw-bold{% endif %}" href="{% url 'dashboard' %}">Ranking</a></li>
+                        <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'calendario' %}active fw-bold{% endif %}" href="{% url 'calendario' %}">Calendário</a></li>
 
                         {% if user.unidade_responsavel %}
                         <li class="nav-item"><a class="nav-link fw-bold text-success bg-white rounded px-2 ms-2" href="{% url 'minha_unidade' %}"><i class="fas fa-users me-1"></i> Minha Unidade</a></li>
@@ -84,7 +84,7 @@
                         {% endif %}
 
                         <li class="nav-item mx-3">
-                            <a class="nav-link text-white position-relative" href="#" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNotificacoes">
+                            <a class="nav-link text-white position-relative {% if request.resolver_match.url_name == 'mural_notificacoes' %}active{% endif %}" href="{% url 'mural_notificacoes' %}">
                                 <i class="fas fa-bell fa-lg"></i>
                                 <span id="badge-notif-pc" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.6rem;">0</span>
                             </a>
@@ -129,7 +129,7 @@
             <i class="fas fa-calendar-alt"></i><span>Agenda</span>
         </a>
         
-        <a href="#" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNotificacoes" class="position-relative">
+        <a href="{% url 'mural_notificacoes' %}" class="position-relative {% if request.resolver_match.url_name == 'mural_notificacoes' %}active{% endif %}">
             <i class="fas fa-bell"></i><span>Avisos</span>
             <span id="badge-notif-mobile" class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.6rem; margin-top: 5px;">0</span>
         </a>
@@ -143,21 +143,6 @@
             <i class="fas fa-users"></i><span>Unidade</span>
         </a>
         {% endif %}
-    </div>
-
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNotificacoes" aria-labelledby="offcanvasNotificacoesLabel">
-        <div class="offcanvas-header text-white" style="background-color: #0d47a1;">
-            <h5 class="offcanvas-title fw-bold" id="offcanvasNotificacoesLabel"><i class="fas fa-bell text-warning me-2"></i>Mural de Avisos</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-        </div>
-        <div class="offcanvas-body bg-light p-0 d-flex flex-column">
-            <div class="p-2 border-bottom bg-white d-flex justify-content-between align-items-center shadow-sm">
-                <span class="small text-muted fw-bold" id="txt-notif-count">0 novas mensagens</span>
-                <button class="btn btn-sm btn-outline-primary fw-bold" onclick="marcarTodasLidas()">Limpar tudo</button>
-            </div>
-            <div id="lista-notificacoes" class="list-group list-group-flush overflow-auto">
-                </div>
-        </div>
     </div>
     {% endif %}
 
@@ -187,99 +172,24 @@
     {% if user.is_authenticated %}
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            carregarNotificacoes();
-
-            // DETETOR DE CLIQUE DO PUSH: Se a URL contiver '?open_notif=1', abre o painel deslizando!
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('open_notif') === '1') {
-                setTimeout(function() {
-                    var elCanvas = document.getElementById('offcanvasNotificacoes');
-                    if (elCanvas) {
-                        var bsCanvas = new bootstrap.Offcanvas(elCanvas);
-                        bsCanvas.show();
-                    }
-                }, 600); // Aguarda a renderização do Bootstrap
-            }
+            verificarNovosAvisos();
         });
 
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
-
-        function carregarNotificacoes() {
+        function verificarNovosAvisos() {
             fetch("{% url 'api_notificacoes' %}")
             .then(response => response.json())
             .then(data => {
-                atualizarBadges(data.count);
-                const lista = document.getElementById('lista-notificacoes');
-                lista.innerHTML = ''; 
-
-                if (data.count === 0) {
-                    lista.innerHTML = `
-                        <div class="text-center p-5 text-muted">
-                            <i class="fas fa-check-circle fa-3x mb-3 text-success opacity-50"></i>
-                            <h6>Mural limpo! Nenhuma novidade.</h6>
-                        </div>`;
+                const bPc = document.getElementById('badge-notif-pc');
+                const bMobile = document.getElementById('badge-notif-mobile');
+                
+                if (data.count > 0) {
+                    if(bPc) { bPc.textContent = data.count; bPc.classList.remove('d-none'); }
+                    if(bMobile) { bMobile.textContent = data.count; bMobile.classList.remove('d-none'); }
                 } else {
-                    data.notificacoes.forEach(n => {
-                        lista.innerHTML += `
-                            <div class="list-group-item list-group-item-action py-3" id="notif-${n.id}">
-                                <div class="d-flex w-100 justify-content-between">
-                                    <h6 class="mb-1 fw-bold text-primary">${n.titulo}</h6>
-                                    <small class="text-muted">${n.data}</small>
-                                </div>
-                                <p class="mb-2 small text-dark">${n.mensagem}</p>
-                                <div class="text-end">
-                                    <button class="btn btn-sm btn-light border text-success fw-bold" onclick="marcarLida(${n.id})">
-                                        <i class="fas fa-check me-1"></i> Entendido
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    });
+                    if(bPc) bPc.classList.add('d-none');
+                    if(bMobile) bMobile.classList.add('d-none');
                 }
             });
-        }
-
-        function atualizarBadges(count) {
-            const bPc = document.getElementById('badge-notif-pc');
-            const bMobile = document.getElementById('badge-notif-mobile');
-            const txtCount = document.getElementById('txt-notif-count');
-            
-            if (count > 0) {
-                bPc.textContent = count; bPc.classList.remove('d-none');
-                bMobile.textContent = count; bMobile.classList.remove('d-none');
-                txtCount.textContent = count + " novas mensagens";
-            } else {
-                bPc.classList.add('d-none');
-                bMobile.classList.add('d-none');
-                txtCount.textContent = "0 mensagens novas";
-            }
-        }
-
-        function marcarLida(id) {
-            fetch(`/notificacoes/ler/${id}/`, {
-                method: 'POST',
-                headers: { 'X-CSRFToken': getCookie('csrftoken') }
-            }).then(() => carregarNotificacoes());
-        }
-
-        function marcarTodasLidas() {
-            fetch("{% url 'marcar_todas_lidas' %}", {
-                method: 'POST',
-                headers: { 'X-CSRFToken': getCookie('csrftoken') }
-            }).then(() => carregarNotificacoes());
         }
     </script>
     {% endif %}

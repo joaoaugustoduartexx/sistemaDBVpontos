@@ -303,7 +303,7 @@ def exportar_relatorio_csv(request):
 
     desbravadores = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
         total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
-        total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q('pontos_extras__data__month=mes', pontos_extras__data__year=ano)), 0)
+        total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
     ).annotate(
         pontuacao_final=F('total_regular') + F('total_extra')
     ).order_by('unidade__nome', '-pontuacao_final')
@@ -320,7 +320,7 @@ def alterar_senha(request):
         if form.is_valid():
             user = form.save()
             update_session_auth_hash(request, user)  
-            messages.success(request, 'Senha atualizada!')
+            messages.success(request, 'Senha updated!')
             return redirect('dashboard')
     else:
         form = PasswordChangeForm(request.user)
@@ -359,20 +359,20 @@ def recusar_membro(request, id_dbv):
     membro.delete() 
     return redirect('painel_diretoria')
 
-# --- 9. API DE NOTIFICAÇÕES IN-APP ---
+# --- 9. NOVO MURAL DE NOTIFICAÇÕES (DEDICADO) ---
+@login_required
+def mural_notificacoes(request):
+    # Avalia a lista IMEDIATAMENTE antes de mudar o banco (mantém o destaque visual de "Nova")
+    notificacoes = list(NotificacaoInApp.objects.filter(usuario=request.user).order_by('-data_criacao'))
+    # Atualiza em massa para "Lida"
+    NotificacaoInApp.objects.filter(usuario=request.user, lida=False).update(lida=True)
+    return render(request, 'core/notificacoes.html', {'notificacoes': notificacoes})
+
 @login_required
 def api_notificacoes(request):
-    notificacoes = NotificacaoInApp.objects.filter(usuario=request.user, lida=False)
-    dados = [
-        {
-            'id': n.id,
-            'titulo': n.titulo,
-            'mensagem': n.mensagem,
-            'data': n.data_criacao.strftime('%d/%m %H:%M')
-        }
-        for n in notificacoes
-    ]
-    return JsonResponse({'count': len(dados), 'notificacoes': dados})
+    """ Mantemos essa rota leve apenas para o contador numérico (Badge) do topo funcionar """
+    count = NotificacaoInApp.objects.filter(usuario=request.user, lida=False).count()
+    return JsonResponse({'count': count})
 
 @login_required
 @require_POST

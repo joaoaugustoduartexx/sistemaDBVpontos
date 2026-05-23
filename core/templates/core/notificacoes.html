@@ -1,0 +1,32 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0 fw-bold text-dark"><i class="fas fa-bell text-warning me-2"></i>Mural de Avisos</h2>
+</div>
+
+<div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden;">
+    <div class="list-group list-group-flush">
+        {% if notificacoes %}
+            {% for n in notificacoes %}
+                <div class="list-group-item py-3 border-bottom {% if not n.lida %}bg-white border-start border-primary border-4{% else %}bg-light opacity-75{% endif %}">
+                    <div class="d-flex w-100 justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0 fw-bold {% if not n.lida %}text-primary{% else %}text-secondary{% endif %}" style="font-size: 1.05rem;">
+                            {% if not n.lida %}<i class="fas fa-circle text-danger me-1" style="font-size: 0.6rem; vertical-align: middle;"></i>{% endif %}
+                            {{ n.titulo }}
+                        </h6>
+                        <small class="text-muted fw-semibold">{{ n.data_criacao|date:"d/m H:i" }}</small>
+                    </div>
+                    <p class="mb-0 text-dark" style="font-size: 0.92rem; line-height: 1.4;">{{ n.mensagem }}</p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-5 bg-white text-muted">
+                <i class="fas fa-check-circle fa-3x mb-3 text-success opacity-50"></i>
+                <h5 class="fw-bold text-dark">Mural limpo!</h5>
+                <p class="mb-0 small">Nenhum aviso ou comunicado importante no momento.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
