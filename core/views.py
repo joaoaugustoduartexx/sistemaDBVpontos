@@ -40,7 +40,7 @@ def dashboard(request):
             F('membros__avaliacoes__estudo_biblico') + F('membros__avaliacoes__escola_sabatina') +
             F('membros__avaliacoes__pequeno_grupo') + F('membros__avaliacoes__fanfarra') +
             F('membros__avaliacoes__ordem_unida'),
-            filter=Q(membros__avaliacoes__data__month=mes_atual, members__avaliacoes__data__year=ano_atual)
+            filter=Q(membros__avaliacoes__data__month=mes_atual, membros__avaliacoes__data__year=ano_atual)
         ), 0) + Coalesce(Sum(
             'membros__pontos_extras__pontos',
             filter=Q(membros__pontos_extras__data__month=mes_atual, membros__pontos_extras__data__year=ano_atual)
