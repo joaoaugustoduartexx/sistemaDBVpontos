@@ -16,6 +16,7 @@ from .models import Unidade, Desbravador, AvaliacaoSemanal, PontoExtra, Evento, 
 from .forms import AvaliacaoForm, DesbravadorForm, EventoForm, PontoExtraForm
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
+from django.core.cache import cache
 
 # --- CONFIGURAÇÃO PWA ---
 def manifest(request):
@@ -31,22 +32,33 @@ def dashboard(request):
     mes_atual = hoje.month
     ano_atual = hoje.year
 
-    ranking = Unidade.objects.annotate(
-        pontos=Coalesce(Sum(
-            F('membros__avaliacoes__biblia') + F('membros__avaliacoes__uniforme') +
-            F('membros__avaliacoes__lenco') + F('membros__avaliacoes__fazer_ideal') +
-            F('membros__avaliacoes__orar') + F('membros__avaliacoes__participacao') +
-            F('membros__avaliacoes__itens_cartao') + F('membros__avaliacoes__clube_visivel') +
-            F('membros__avaliacoes__estudo_biblico') + F('membros__avaliacoes__escola_sabatina') +
-            F('membros__avaliacoes__pequeno_grupo') + F('membros__avaliacoes__fanfarra') +
-            F('membros__avaliacoes__ordem_unida'),
-            filter=Q(membros__avaliacoes__data__month=mes_atual, membros__avaliacoes__data__year=ano_atual)
-        ), 0) + Coalesce(Sum(
-            'membros__pontos_extras__pontos',
-            filter=Q(membros__pontos_extras__data__month=mes_atual, membros__pontos_extras__data__year=ano_atual)
-        ), 0),
-        total_membros=Count('membros', filter=Q(membros__ativo=True, membros__aprovado=True), distinct=True)
-    ).order_by('-pontos')
+    # 1. Cria uma chave de cache única para o mês atual
+    chave_cache = f'ranking_unidades_{mes_atual}_{ano_atual}'
+    
+    # 2. Tenta pegar o ranking pronto da memória RAM do servidor
+    ranking = cache.get(chave_cache)
+
+    # 3. Se o cache estiver vazio (ou tiver expirado), fazemos o cálculo pesado
+    if not ranking:
+        ranking = Unidade.objects.annotate(
+            pontos=Coalesce(Sum(
+                F('membros__avaliacoes__biblia') + F('membros__avaliacoes__uniforme') +
+                F('membros__avaliacoes__lenco') + F('membros__avaliacoes__fazer_ideal') +
+                F('membros__avaliacoes__orar') + F('membros__avaliacoes__participacao') +
+                F('membros__avaliacoes__itens_cartao') + F('membros__avaliacoes__clube_visivel') +
+                F('membros__avaliacoes__estudo_biblico') + F('membros__avaliacoes__escola_sabatina') +
+                F('membros__avaliacoes__pequeno_grupo') + F('membros__avaliacoes__fanfarra') +
+                F('membros__avaliacoes__ordem_unida'),
+                filter=Q(membros__avaliacoes__data__month=mes_atual, membros__avaliacoes__data__year=ano_atual)
+            ), 0) + Coalesce(Sum(
+                'membros__pontos_extras__pontos',
+                filter=Q(membros__pontos_extras__data__month=mes_atual, membros__pontos_extras__data__year=ano_atual)
+            ), 0),
+            total_membros=Count('membros', filter=Q(membros__ativo=True, membros__aprovado=True), distinct=True)
+        ).order_by('-pontos')
+        
+        # 4. Salva o resultado no cache por 10 minutos (600 segundos)
+        cache.set(chave_cache, ranking, 600)
 
     return render(request, 'core/dashboard.html', {'ranking': ranking, 'mes': hoje.strftime('%B/%Y')})
 
