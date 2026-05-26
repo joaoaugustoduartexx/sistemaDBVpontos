@@ -234,10 +234,10 @@ def calendario(request):
         mes = 12; ano -= 1
 
     if request.user.is_diretoria:
-        eventos = Evento.objects.filter(data_evento__year=ano, data_evento__month=mes)
+        eventos = Evento.objects.select_related('unidade', 'autor').filter(data_evento__year=ano, data_evento__month=mes)
     else:
         unidade_usuario = request.user.unidade_responsavel
-        eventos = Evento.objects.filter(
+        eventos = Evento.objects.select_related('unidade', 'autor').filter(
             Q(unidade=unidade_usuario) | Q(unidade__isnull=True),
             data_evento__year=ano, data_evento__month=mes
         )

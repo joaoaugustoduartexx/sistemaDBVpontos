@@ -1,48 +1,107 @@
-const CACHE_NAME = 'dbv-cache-v1';
-const urlsToCache = [
-  '/',
-  '/static/css/bootstrap.min.css', 
-  // Adicione outros arquivos estáticos cruciais aqui
-];
+const CACHE_NAME = 'dbv-cache-v2'; // Mudamos para v2 para forçar a atualização
 
-// Instalação: Cache inicial
+// Instalação: Cache inicial básico
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(urlsToCache);
-      })
-  );
+  self.skipWaiting(); // Força o novo Service Worker a assumir o controle imediatamente
 });
 
-// Fetch: Tenta rede primeiro, se falhar (offline), tenta cache
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
+// Ativação: Limpa caches antigos (v1) para não ocupar memória do celular
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
     })
   );
 });
 
+// Fetch: O Motor de Velocidade
+self.addEventListener('fetch', event => {
+  const requestUrl = new URL(event.request.url);
+
+  // ESTRATÉGIA 1: CACHE FIRST (Para estáticos, CSS, Imagens e CDNs do Bootstrap/FontAwesome)
+  // O celular carrega da própria memória instantaneamente.
+  if (
+    requestUrl.pathname.startsWith('/static/') || 
+    requestUrl.hostname.includes('cdn.jsdelivr.net') || 
+    requestUrl.hostname.includes('cdnjs.cloudflare.com')
+  ) {
+    event.respondWith(
+      caches.match(event.request).then(cachedResponse => {
+        if (cachedResponse) {
+          return cachedResponse; // Retorna instantâneo do celular
+        }
+        // Se não tem no cache, baixa da rede e salva para a próxima vez
+        return fetch(event.request).then(networkResponse => {
+          return caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, networkResponse.clone());
+            return networkResponse;
+          });
+        });
+      })
+    );
+  } 
+  // ESTRATÉGIA 2: NETWORK FIRST (Para páginas HTML e API de notificações)
+  // Garante que o ranking e as listas estejam sempre atualizados.
+  else {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        // Se estiver offline, tenta buscar a última versão salva na memória
+        return caches.match(event.request);
+      })
+    );
+  }
+});
+
 // Escuta o evento de Push Notification vindo do servidor
 self.addEventListener('push', function(event) {
-    let data = { head: "Nova Notificação", body: "Você tem uma nova mensagem." };
+    let data = { head: "Nova Notificação", body: "Você tem um novo aviso.", url: "/notificacoes/" };
     
     // Tenta ler os dados que o Django enviou
     if (event.data) {
         data = JSON.parse(event.data.text());
     }
 
-    // Configura o visual da caixinha que vai aparecer no Windows/Celular
     const options = {
         body: data.body,
-        icon: '/static/icons/icon-192.png', // O ícone do seu DBV
+        icon: '/static/icons/icon-192.png',
         badge: '/static/icons/icon-192.png',
-        vibrate: [200, 100, 200] // Faz o celular vibrar
+        vibrate: [200, 100, 200],
+        data: { url: data.url } // SALVA A URL DE DESTINO AQUI
     };
 
-    // Pede para o navegador exibir na tela
     event.waitUntil(
         self.registration.showNotification(data.head, options)
+    );
+});
+
+// NOVO: Ação ao CLICAR na notificação Push
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close(); // Fecha a caixinha do aviso
+    
+    // Pega a URL que o Django enviou (ou vai para o mural por padrão)
+    const urlToOpen = event.notification.data.url || '/notificacoes/';
+
+    event.waitUntil(
+        // Verifica se o app já está aberto em alguma aba do celular/PC
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+            for (let i = 0; i < clientList.length; i++) {
+                let client = clientList[i];
+                // Se já estiver aberto, apenas foca na tela e redireciona
+                if ('focus' in client) {
+                    client.navigate(urlToOpen);
+                    return client.focus();
+                }
+            }
+            // Se o app estiver fechado, abre uma nova janela na tela certa
+            if (clients.openWindow) {
+                return clients.openWindow(urlToOpen);
+            }
+        })
     );
 });
