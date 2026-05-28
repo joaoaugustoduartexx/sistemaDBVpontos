@@ -197,12 +197,14 @@ def minha_unidade(request):
 def cadastrar_desbravador(request):
     sou_diretor = request.user.is_diretoria or request.user.is_superuser
     
-    initial_data = {}
+    # 1. Garante que o formulário visual já carregue com o "Ativo" marcado
+    initial_data = {'ativo': True} 
     if not sou_diretor and request.user.unidade_responsavel:
         initial_data['unidade'] = request.user.unidade_responsavel.id
 
     if request.method == 'POST':
         form = DesbravadorForm(request.POST, user=request.user, initial=initial_data)
+        
         if form.is_valid():
             dbv = form.save(commit=False)
             if sou_diretor:
@@ -210,64 +212,28 @@ def cadastrar_desbravador(request):
             else:
                 dbv.aprovado = False 
                 dbv.unidade = request.user.unidade_responsavel
+            
+            # 2. Força no backend! Se é um membro novo, ele TEM que nascer ativo na base de dados
+            dbv.ativo = True 
+            
             dbv.save()
             
             if dbv.aprovado:
-                messages.success(request, f"{dbv.nome_completo} cadastrado!")
+                messages.success(request, f"{dbv.nome_completo} cadastrado com sucesso!")
             else:
                 messages.warning(request, f"Cadastro de {dbv.nome_completo} enviado para aprovação.")
             return redirect('dashboard')
+            
+        else:
+            # 3. Fim das falhas silenciosas: se der erro (ex: data inválida), o sistema avisa com banner vermelho!
+            for field, erros in form.errors.items():
+                for erro in erros:
+                    nome_campo = form.fields[field].label if form.fields.get(field) else field
+                    messages.error(request, f"Erro em {nome_campo}: {erro}")
     else:
         form = DesbravadorForm(user=request.user, initial=initial_data)
+        
     return render(request, 'core/cadastrar_desbravador.html', {'form': form})
-
-# --- 6. CALENDÁRIO ---
-@login_required
-def calendario(request):
-    hoje = date.today()
-    ano = int(request.GET.get('ano', hoje.year))
-    mes = int(request.GET.get('mes', hoje.month))
-
-    if mes > 12:
-        mes = 1; ano += 1
-    elif mes < 1:
-        mes = 12; ano -= 1
-
-    if request.user.is_diretoria:
-        eventos = Evento.objects.select_related('unidade', 'autor').filter(data_evento__year=ano, data_evento__month=mes)
-    else:
-        unidade_usuario = request.user.unidade_responsavel
-        eventos = Evento.objects.select_related('unidade', 'autor').filter(
-            Q(unidade=unidade_usuario) | Q(unidade__isnull=True),
-            data_evento__year=ano, data_evento__month=mes
-        )
-
-    cal = calendar.Calendar()
-    semanas_cruas = cal.monthdays2calendar(ano, mes)
-    semanas = []
-    for semana in semanas_cruas:
-        dias_semana = []
-        for dia, dia_semana in semana:
-            if dia == 0:
-                dias_semana.append(None) 
-            else:
-                eventos_do_dia = eventos.filter(data_evento__day=dia)
-                dias_semana.append({
-                    'dia': dia,
-                    'hoje': (dia == hoje.day and mes == hoje.month and ano == hoje.year),
-                    'eventos': eventos_do_dia
-                })
-        semanas.append(dias_semana)
-
-    context = {
-        'semanas': semanas,
-        'mes_atual': date(ano, mes, 1),
-        'prox_mes': 1 if mes == 12 else mes + 1,
-        'prox_ano': ano + 1 if mes == 12 else ano,
-        'ant_mes': 12 if mes == 1 else mes - 1,
-        'ant_ano': ano - 1 if mes == 1 else ano,
-    }
-    return render(request, 'core/calendario.html', context)
 
 @login_required
 def cadastrar_evento(request):
