@@ -107,3 +107,17 @@ WEBPUSH_SETTINGS = {
     "VAPID_PRIVATE_KEY": os.getenv('VAPID_PRIVATE_KEY'),
     "VAPID_ADMIN_EMAIL": "joaocintraduarte@gmail.com"
 }
+
+# --- BLINDAGEM DE SEGURANÇA (Ativa apenas em Produção) ---
+if not DEBUG:
+    # Garante que todo o tráfego passe por HTTPS
+    SECURE_SSL_REDIRECT = True
+    
+    # Protege os cookies de sessão e CSRF (evita roubo de login em Wi-Fi público)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # Força os navegadores a lembrarem que o site é HTTPS por 1 ano (HSTS)
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

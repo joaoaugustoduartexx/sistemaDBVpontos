@@ -18,6 +18,17 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.core.cache import cache
 
+# --- CONSTANTES ---
+TOTAL_REGULAR_EXPR = (
+    F('avaliacoes__biblia') + F('avaliacoes__uniforme') +
+    F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
+    F('avaliacoes__orar') + F('avaliacoes__participacao') +
+    F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') +
+    F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') +
+    F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') +
+    F('avaliacoes__ordem_unida')
+)
+
 # --- CONFIGURAÇÃO PWA ---
 def manifest(request):
     return render(request, 'manifest.json', content_type='application/json')
@@ -80,6 +91,10 @@ def avaliar_membro(request, id_desbravador):
             avaliacao.save()
             messages.success(request, f"Pontuação de {membro.nome_completo} salva com sucesso!")
             
+            # Invalida o cache para que o ranking atualize imediatamente
+            hoje = timezone.now()
+            cache.delete(f'ranking_unidades_{hoje.month}_{hoje.year}')
+
             if request.user.is_diretoria:
                 return redirect('painel_diretoria')
             return redirect('minha_unidade')
@@ -111,6 +126,11 @@ def painel_diretoria(request):
                     data=date.today()
                 )
                 count += 1
+            
+            # Invalida o cache para o ranking atualizar imediatamente
+            hoje = timezone.now()
+            cache.delete(f'ranking_unidades_{hoje.month}_{hoje.year}')
+            
             messages.success(request, f"{count} desbravadores receberam {pontos} pontos!")
         else:
             messages.warning(request, "Preencha todos os campos e selecione os desbravadores.")
@@ -159,18 +179,8 @@ def relatorio_mensal(request):
     mes = int(request.GET.get('mes', hoje.month))
     ano = int(request.GET.get('ano', hoje.year))
 
-    total_regular_expr = (
-        F('avaliacoes__biblia') + F('avaliacoes__uniforme') +
-        F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
-        F('avaliacoes__orar') + F('avaliacoes__participacao') +
-        F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') +
-        F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') +
-        F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') +
-        F('avaliacoes__ordem_unida')
-    )
-
     relatorio = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
-        total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
+        total_regular=Coalesce(Sum(TOTAL_REGULAR_EXPR, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
         total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
     ).annotate(
         pontuacao_final=F('total_regular') + F('total_extra')
@@ -234,13 +244,13 @@ def calendario(request):
         mes = 12; ano -= 1
 
     if request.user.is_diretoria:
-        eventos = Evento.objects.filter(data_evento__year=ano, data_evento__month=mes)
+        eventos = Evento.objects.filter(data_evento__year=ano, data_evento__month=mes).select_related('unidade', 'autor')
     else:
         unidade_usuario = request.user.unidade_responsavel
         eventos = Evento.objects.filter(
             Q(unidade=unidade_usuario) | Q(unidade__isnull=True),
             data_evento__year=ano, data_evento__month=mes
-        )
+        ).select_related('unidade', 'autor')
 
     cal = calendar.Calendar()
     semanas_cruas = cal.monthdays2calendar(ano, mes)
@@ -306,15 +316,8 @@ def exportar_relatorio_csv(request):
     writer = csv.writer(response, delimiter=';')
     writer.writerow(['Desbravador', 'Unidade', 'Pontos Regulares', 'Pontos Extras', 'Pontuacao Total'])
 
-    total_regular_expr = (
-        F('avaliacoes__biblia') + F('avaliacoes__uniforme') + F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
-        F('avaliacoes__orar') + F('avaliacoes__participacao') + F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') +
-        F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') + F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') +
-        F('avaliacoes__ordem_unida')
-    )
-
     desbravadores = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
-        total_regular=Coalesce(Sum(total_regular_expr, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
+        total_regular=Coalesce(Sum(TOTAL_REGULAR_EXPR, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0),
         total_extra=Coalesce(Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0)
     ).annotate(
         pontuacao_final=F('total_regular') + F('total_extra')

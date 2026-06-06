@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from webpush import send_user_notification
+import logging
 
 # 1. UNIDADES
 class Unidade(models.Model):
@@ -229,5 +230,5 @@ def processar_disparo_notificacao(sender, instance, action, pk_set, **kwargs):
             }
             try:
                 send_user_notification(user=user, payload=payload, ttl=1000)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Falha ao enviar push notification para {user.username}: {e}")
