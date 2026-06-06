@@ -12,7 +12,7 @@ from django.views.decorators.http import require_POST
 from django.conf import settings
 import calendar
 import csv
-from .models import Unidade, Desbravador, AvaliacaoSemanal, PontoExtra, Evento, Usuario, NotificacaoInApp 
+from .models import Unidade, Desbravador, AvaliacaoSemanal, PontoExtra, Evento, Usuario, NotificacaoInApp, NotificacaoManual
 from .forms import AvaliacaoForm, DesbravadorForm, EventoForm, PontoExtraForm
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
