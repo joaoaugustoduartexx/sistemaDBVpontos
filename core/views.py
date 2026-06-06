@@ -405,12 +405,43 @@ def calendario(request):
                 })
         semanas.append(dias_semana)
 
-    context = {
-        'semanas': semanas,
-        'mes_atual': date(ano, mes, 1),
-        'prox_mes': 1 if mes == 12 else mes + 1,
-        'prox_ano': ano + 1 if mes == 12 else ano,
-        'ant_mes': 12 if mes == 1 else mes - 1,
-        'ant_ano': ano - 1 if mes == 1 else ano,
-    }
-    return render(request, 'core/calendario.html', context)
+# --- 10. NOTIFICAÇÕES EM MASSA (DIRETORIA) ---
+@login_required
+@require_POST
+def enviar_notificacao_massa(request):
+    if not request.user.is_diretoria:
+        messages.error(request, "Acesso Negado: Área restrita à Diretoria.")
+        return redirect('dashboard')
+
+    titulo = request.POST.get('titulo')
+    mensagem = request.POST.get('mensagem')
+    publico_alvo = request.POST.get('publico_alvo')
+    unidade_id = request.POST.get('unidade_id')
+
+    if not titulo or not mensagem or not publico_alvo:
+        messages.error(request, "Preencha todos os campos obrigatórios para enviar a notificação.")
+        return redirect('painel_diretoria')
+
+    usuarios = Usuario.objects.filter(is_active=True)
+
+    if publico_alvo == 'conselheiros':
+        usuarios = usuarios.filter(cargo=Usuario.Cargos.CONSELHEIRO)
+    elif publico_alvo == 'unidade':
+        if not unidade_id:
+            messages.error(request, "Selecione uma unidade válida.")
+            return redirect('painel_diretoria')
+        usuarios = usuarios.filter(unidade_responsavel_id=unidade_id)
+
+    if not usuarios.exists():
+        messages.warning(request, "Nenhum usuário correspondente encontrado para este público-alvo.")
+        return redirect('painel_diretoria')
+
+    # O M2M_CHANGED signal configurado no modelo irá cuidar do disparo do webpush
+    nova_notificacao = NotificacaoManual.objects.create(
+        titulo=titulo,
+        mensagem=mensagem
+    )
+    nova_notificacao.destinatarios.set(usuarios)
+
+    messages.success(request, f"Notificação '{titulo}' enviada com sucesso para {usuarios.count()} usuário(s)!")
+    return redirect('painel_diretoria')

@@ -64,4 +64,5 @@ urlpatterns = [
     path('notificacoes/api/', api_notificacoes, name='api_notificacoes'),
     path('notificacoes/ler/<int:id_notificacao>/', marcar_notificacao_lida, name='marcar_notificacao_lida'),
     path('notificacoes/ler-todas/', marcar_todas_lidas, name='marcar_todas_lidas'),
+    path('notificacoes/massa/', enviar_notificacao_massa, name='enviar_notificacao_massa'),
 ]
