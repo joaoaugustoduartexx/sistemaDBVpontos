@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from core.views import (
     dashboard,
+    enviar_notificacao_massa,
     exportar_relatorio_csv,
     minha_unidade, 
     avaliar_membro, 
@@ -17,10 +18,11 @@ from core.views import (
     reset_senha_diretoria,
     aprovar_membro,
     recusar_membro, 
-    mural_notificacoes, # <--- IMPORTAÇÃO DA NOVA TELA
+    mural_notificacoes,
     api_notificacoes,           
     marcar_notificacao_lida,
-    marcar_todas_lidas
+    marcar_todas_lidas,
+    enviar_notificacao_massa,
 )
 
 urlpatterns = [
