@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from webpush import send_user_notification
 
 from .models import Clube, Usuario, Unidade, Desbravador, PontoExtra, AvaliacaoSemanal, Evento, NotificacaoManual
 
@@ -35,9 +34,18 @@ class ClubeAdmin(admin.ModelAdmin):
     prepopulated_fields = {'slug': ('nome',)}
 
 
+@admin.register(Unidade)
+class UnidadeAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'clube')
+    list_filter = ('clube',)
+
+    def get_readonly_fields(self, request, obj=None):
+        # A unidade não muda de clube: conselheiros e eventos dela ficariam no clube antigo
+        return ('clube',) if obj else ()
+
+
 # Registra tudo
 admin.site.register(Usuario, CustomUserAdmin)
-admin.site.register(Unidade)
 admin.site.register(Desbravador)
 admin.site.register(PontoExtra)
 admin.site.register(AvaliacaoSemanal)
@@ -46,26 +54,7 @@ admin.site.register(Evento)
 
 @admin.register(NotificacaoManual)
 class NotificacaoManualAdmin(admin.ModelAdmin):
+    # O push sai só pelo sinal m2m_changed (core/models.py), depois do commit:
+    # sem envio aqui, cada destinatário recebe a notificação uma única vez
     list_display = ('titulo', 'clube', 'criado_em')
     filter_horizontal = ('destinatarios',)
-
-    # TROCAMOS AQUI: Usamos o save_related em vez do save_model
-    def save_related(self, request, form, formsets, change):
-        # 1. Primeiro, deixamos o Django salvar a mensagem E a lista de usuários no banco
-        super().save_related(request, form, formsets, change)
-
-        # 2. Agora pegamos o objeto recém-salvo (com os usuários já atrelados a ele!)
-        obj = form.instance
-
-        payload = {
-            "head": obj.titulo,
-            "body": obj.mensagem
-        }
-
-        # 3. Dispara o Push (agora a lista não está mais vazia!)
-        for usuario in obj.destinatarios.all():
-            try:
-                send_user_notification(user=usuario, payload=payload, ttl=1000)
-            except Exception as e:
-                # Se falhar, vai imprimir o erro no terminal preto onde o servidor está rodando
-                print(f"Erro ao enviar webpush para {usuario}: {e}")

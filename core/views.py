@@ -1,6 +1,6 @@
 from datetime import date
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Sum, Count, Q, F
+from django.db.models import Count, F, IntegerField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
@@ -20,14 +20,12 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.core.cache import cache
 
 # --- CONSTANTES ---
-TOTAL_REGULAR_EXPR = (
-    F('avaliacoes__biblia') + F('avaliacoes__uniforme') +
-    F('avaliacoes__lenco') + F('avaliacoes__fazer_ideal') +
-    F('avaliacoes__orar') + F('avaliacoes__participacao') +
-    F('avaliacoes__itens_cartao') + F('avaliacoes__clube_visivel') +
-    F('avaliacoes__estudo_biblico') + F('avaliacoes__escola_sabatina') +
-    F('avaliacoes__pequeno_grupo') + F('avaliacoes__fanfarra') +
-    F('avaliacoes__ordem_unida')
+# Pontos de uma avaliação semanal (os mesmos critérios de AvaliacaoSemanal.total_semanal)
+PONTOS_AVALIACAO = (
+    F('biblia') + F('uniforme') + F('lenco') + F('fazer_ideal') +
+    F('orar') + F('participacao') + F('itens_cartao') +
+    F('clube_visivel') + F('estudo_biblico') + F('escola_sabatina') +
+    F('pequeno_grupo') + F('fanfarra') + F('ordem_unida')
 )
 
 # Senhas do reset feito pela diretoria (alfanuméricas, via secrets)
@@ -38,6 +36,54 @@ TAMANHO_SENHA_RESETADA = 8
 def chave_cache_ranking(clube_id, mes, ano):
     """Chave do cache do ranking mensal, separada por clube (tenant)."""
     return f'ranking_unidades_{clube_id}_{mes}_{ano}'
+
+
+def intervalo_do_mes(ano, mes):
+    """Primeiro dia do mês e primeiro dia do mês seguinte (intervalo [inicio, fim))."""
+    inicio = date(ano, mes, 1)
+    fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
+    return inicio, fim
+
+
+def mes_e_ano_da_requisicao(request):
+    """Lê ?mes= e ?ano= (padrão: mês atual no fuso do sistema); valores inválidos voltam ao mês atual."""
+    hoje = timezone.localdate()
+    try:
+        mes = int(request.GET.get('mes', hoje.month))
+        ano = int(request.GET.get('ano', hoje.year))
+        intervalo_do_mes(ano, mes)
+    except (TypeError, ValueError, OverflowError):
+        return hoje.month, hoje.year
+    return mes, ano
+
+
+def soma_no_mes(queryset, campo_dono, expressao, inicio, fim):
+    """Subquery com a soma de `expressao` no mês, por dono (`campo_dono` = OuterRef('pk')).
+
+    Cada fonte de pontos (avaliações, pontos extras) é somada na sua própria subquery. Somar as
+    duas relações reversas no mesmo JOIN multiplicaria as linhas (produto cartesiano) e inflaria
+    os totais.
+    """
+    soma = (
+        queryset.filter(**{campo_dono: OuterRef('pk')}, data__gte=inicio, data__lt=fim)
+        .values(campo_dono)
+        .annotate(total=Sum(expressao))
+        .values('total')
+    )
+    return Coalesce(Subquery(soma), 0, output_field=IntegerField())
+
+
+def pontuacao_mensal_dos_membros(clube_id, ano, mes):
+    """Membros ativos e aprovados do clube com total_regular, total_extra e pontuacao_final do mês."""
+    inicio, fim = intervalo_do_mes(ano, mes)
+    return Desbravador.objects.filter(
+        unidade__clube_id=clube_id, ativo=True, aprovado=True
+    ).select_related('unidade').annotate(
+        total_regular=soma_no_mes(AvaliacaoSemanal.objects, 'desbravador', PONTOS_AVALIACAO, inicio, fim),
+        total_extra=soma_no_mes(PontoExtra.objects, 'desbravador', F('pontos'), inicio, fim),
+    ).annotate(
+        pontuacao_final=F('total_regular') + F('total_extra')
+    )
 
 
 # --- CONFIGURAÇÃO PWA ---
@@ -56,38 +102,39 @@ def service_worker(request):
 def dashboard(request):
     """Exibe o ranking mensal das unidades (avaliações semanais + pontos extras do mês atual).
 
-    Só entram as unidades do clube do usuário. O resultado fica em cache por
-    10 minutos numa chave por clube (ranking_unidades_<clube>_<mês>_<ano>).
+    Só entram as unidades do clube do usuário; o mês é o do fuso do sistema (não UTC). O resultado
+    fica em cache por 10 minutos numa chave por clube (ranking_unidades_<clube>_<mês>_<ano>).
     """
-    hoje = timezone.now()
-    mes_atual = hoje.month
-    ano_atual = hoje.year
+    hoje = timezone.localdate()
     clube_id = request.user.clube_id
 
     # 1. Chave de cache única por clube e mês (não vaza entre clubes)
-    chave_cache = chave_cache_ranking(clube_id, mes_atual, ano_atual)
+    chave_cache = chave_cache_ranking(clube_id, hoje.month, hoje.year)
 
     # 2. Tenta pegar o ranking pronto da memória RAM do servidor
     ranking = cache.get(chave_cache)
 
-    # 3. Se o cache estiver vazio (ou tiver expirado), fazemos o cálculo pesado
-    if not ranking:
-        ranking = Unidade.objects.filter(clube_id=clube_id).annotate(
-            pontos=Coalesce(Sum(
-                F('membros__avaliacoes__biblia') + F('membros__avaliacoes__uniforme') +
-                F('membros__avaliacoes__lenco') + F('membros__avaliacoes__fazer_ideal') +
-                F('membros__avaliacoes__orar') + F('membros__avaliacoes__participacao') +
-                F('membros__avaliacoes__itens_cartao') + F('membros__avaliacoes__clube_visivel') +
-                F('membros__avaliacoes__estudo_biblico') + F('membros__avaliacoes__escola_sabatina') +
-                F('membros__avaliacoes__pequeno_grupo') + F('membros__avaliacoes__fanfarra') +
-                F('membros__avaliacoes__ordem_unida'),
-                filter=Q(membros__avaliacoes__data__month=mes_atual, membros__avaliacoes__data__year=ano_atual)
-            ), 0) + Coalesce(Sum(
-                'membros__pontos_extras__pontos',
-                filter=Q(membros__pontos_extras__data__month=mes_atual, membros__pontos_extras__data__year=ano_atual)
-            ), 0),
-            total_membros=Count('membros', filter=Q(membros__ativo=True, membros__aprovado=True), distinct=True)
-        ).order_by('-pontos')
+    # 3. Se não estiver em cache (ou tiver expirado), fazemos o cálculo: cada soma numa
+    #    subquery própria, sem JOIN entre avaliações e pontos extras (produto cartesiano)
+    if ranking is None:
+        inicio, fim = intervalo_do_mes(hoje.year, hoje.month)
+        membros_ativos = (
+            Desbravador.objects.filter(unidade=OuterRef('pk'), ativo=True, aprovado=True)
+            .values('unidade')
+            .annotate(total=Count('pk'))
+            .values('total')
+        )
+        ranking = list(
+            Unidade.objects.filter(clube_id=clube_id).annotate(
+                total_regular=soma_no_mes(
+                    AvaliacaoSemanal.objects, 'desbravador__unidade', PONTOS_AVALIACAO, inicio, fim
+                ),
+                total_extra=soma_no_mes(PontoExtra.objects, 'desbravador__unidade', F('pontos'), inicio, fim),
+                total_membros=Coalesce(Subquery(membros_ativos), 0, output_field=IntegerField()),
+            ).annotate(
+                pontos=F('total_regular') + F('total_extra')
+            ).order_by('-pontos', 'nome')
+        )
 
         # 4. Salva o resultado no cache por 10 minutos (600 segundos)
         cache.set(chave_cache, ranking, 600)
@@ -120,10 +167,9 @@ def avaliar_membro(request, id_desbravador):
             avaliacao.save()
             messages.success(request, f"Pontuação de {membro.nome_completo} salva com sucesso!")
 
-            # Invalida o cache para que o ranking atualize imediatamente
-            hoje = timezone.now()
+            # Invalida o cache do mês da avaliação para o ranking atualizar imediatamente
             cache.delete(chave_cache_ranking(
-                request.user.clube_id, hoje.month, hoje.year
+                request.user.clube_id, avaliacao.data.month, avaliacao.data.year
             ))
 
             if request.user.is_diretoria:
@@ -164,6 +210,7 @@ def painel_diretoria(request):
                 id__in=[i for i in ids_selecionados if i.isdigit()],
                 unidade__clube_id=clube_id, ativo=True, aprovado=True,
             )
+            hoje = timezone.localdate()  # data local (não UTC)
             count = 0
             for membro in membros:
                 PontoExtra.objects.create(
@@ -171,12 +218,11 @@ def painel_diretoria(request):
                     autor=request.user,
                     pontos=int(pontos),
                     motivo=motivo,
-                    data=date.today()
+                    data=hoje
                 )
                 count += 1
 
             # Invalida o cache para o ranking atualizar imediatamente
-            hoje = timezone.now()
             cache.delete(chave_cache_ranking(clube_id, hoje.month, hoje.year))
 
             messages.success(request, f"{count} desbravadores receberam {pontos} pontos!")
@@ -238,27 +284,15 @@ def painel_diretoria(request):
 def relatorio_mensal(request):
     """Relatório de pontuação mensal por desbravador (somente diretoria).
 
-    Usa os parâmetros GET "mes" e "ano" (padrão: mês e ano atuais).
+    Usa os parâmetros GET "mes" e "ano" (padrão: mês e ano atuais no fuso do sistema).
     """
     if not request.user.is_diretoria:
         messages.error(request, "Acesso restrito.")
         return redirect('dashboard')
 
-    hoje = timezone.now()
-    mes = int(request.GET.get('mes', hoje.month))
-    ano = int(request.GET.get('ano', hoje.year))
-
-    relatorio = Desbravador.objects.filter(
-        unidade__clube_id=request.user.clube_id, ativo=True, aprovado=True
-    ).select_related('unidade').annotate(
-        total_regular=Coalesce(
-            Sum(TOTAL_REGULAR_EXPR, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0
-        ),
-        total_extra=Coalesce(
-            Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0
-        )
-    ).annotate(
-        pontuacao_final=F('total_regular') + F('total_extra')
+    mes, ano = mes_e_ano_da_requisicao(request)
+    relatorio = pontuacao_mensal_dos_membros(
+        request.user.clube_id, ano, mes
     ).order_by('-pontuacao_final', 'nome_completo')
 
     return render(request, 'core/relatorio_mensal.html', {
@@ -339,7 +373,11 @@ def cadastrar_evento(request):
     Eventos criados por quem não é da diretoria ficam vinculados à unidade do autor.
     O evento sempre pertence ao clube do autor.
     """
-    if not request.user.is_diretoria and not request.user.unidade_responsavel:
+    # A unidade do autor só vale se for do clube dele (dado inconsistente não cruza clubes)
+    unidade_autor = request.user.unidade_responsavel
+    if unidade_autor and unidade_autor.clube_id != request.user.clube_id:
+        unidade_autor = None
+    if not request.user.is_diretoria and not unidade_autor:
         messages.error(request, "Sem permissão.")
         return redirect('calendario')
 
@@ -350,7 +388,7 @@ def cadastrar_evento(request):
             evento.autor = request.user
             evento.clube_id = request.user.clube_id
             if not request.user.is_diretoria:
-                evento.unidade = request.user.unidade_responsavel
+                evento.unidade = unidade_autor
             evento.save()
             messages.success(request, "Evento criado!")
             return redirect('calendario')
@@ -366,9 +404,7 @@ def exportar_relatorio_csv(request):
     if not request.user.is_diretoria:
         return redirect('dashboard')
 
-    hoje = timezone.now()
-    mes = int(request.GET.get('mes', hoje.month))
-    ano = int(request.GET.get('ano', hoje.year))
+    mes, ano = mes_e_ano_da_requisicao(request)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="pontuacao_dbv_{mes}_{ano}.csv"'
@@ -377,17 +413,8 @@ def exportar_relatorio_csv(request):
     writer = csv.writer(response, delimiter=';')
     writer.writerow(['Desbravador', 'Unidade', 'Pontos Regulares', 'Pontos Extras', 'Pontuacao Total'])
 
-    desbravadores = Desbravador.objects.filter(
-        unidade__clube_id=request.user.clube_id, ativo=True, aprovado=True
-    ).select_related('unidade').annotate(
-        total_regular=Coalesce(
-            Sum(TOTAL_REGULAR_EXPR, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0
-        ),
-        total_extra=Coalesce(
-            Sum('pontos_extras__pontos', filter=Q(pontos_extras__data__month=mes, pontos_extras__data__year=ano)), 0
-        )
-    ).annotate(
-        pontuacao_final=F('total_regular') + F('total_extra')
+    desbravadores = pontuacao_mensal_dos_membros(
+        request.user.clube_id, ano, mes
     ).order_by('unidade__nome', '-pontuacao_final')
 
     for dbv in desbravadores:
@@ -416,7 +443,8 @@ def alterar_senha(request):
 def toggle_acesso(request, user_id):
     """Ativa/desativa o acesso de outro usuário (somente POST e diretoria).
 
-    Superusuários só podem ser alterados por outro superusuário.
+    Contas de administração (superusuário ou is_staff, com acesso ao /admin/)
+    só podem ser alteradas por um superusuário.
     """
     if not request.user.is_diretoria:
         return redirect('dashboard')
@@ -425,7 +453,8 @@ def toggle_acesso(request, user_id):
     )
     if usuario_alvo == request.user:
         return redirect('painel_diretoria')
-    if usuario_alvo.is_superuser and not request.user.is_superuser:
+    alvo_admin = usuario_alvo.is_superuser or usuario_alvo.is_staff
+    if alvo_admin and not request.user.is_superuser:
         messages.error(
             request, 'Sem permissão para alterar um administrador do sistema.'
         )
@@ -443,7 +472,9 @@ def reset_senha_diretoria(request, user_id):
 
     Somente POST e diretoria. A nova senha é exibida uma única vez na
     mensagem de sucesso para ser repassada ao usuário. Não redefine a
-    própria senha nem a de um superusuário (exceto por outro superusuário).
+    própria senha nem a de uma conta de administração (superusuário ou
+    is_staff), exceto quando quem pede é um superusuário: a senha exibida
+    daria acesso ao /admin/, que não é separado por clube.
     """
     if not request.user.is_diretoria:
         return redirect('dashboard')
@@ -455,7 +486,8 @@ def reset_senha_diretoria(request, user_id):
             request, 'Para alterar a sua própria senha, use o menu "Senha".'
         )
         return redirect('painel_diretoria')
-    if usuario.is_superuser and not request.user.is_superuser:
+    alvo_admin = usuario.is_superuser or usuario.is_staff
+    if alvo_admin and not request.user.is_superuser:
         messages.error(
             request, 'Sem permissão para alterar um administrador do sistema.'
         )
@@ -550,7 +582,7 @@ def calendario(request):
     A diretoria vê todos os eventos; os demais veem os da própria unidade e os globais (sem unidade).
     Sempre apenas eventos do clube do usuário.
     """
-    hoje = date.today()
+    hoje = timezone.localdate()
     ano = int(request.GET.get('ano', hoje.year))
     mes = int(request.GET.get('mes', hoje.month))
 

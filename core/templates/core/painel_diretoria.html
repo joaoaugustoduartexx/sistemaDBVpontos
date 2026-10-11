@@ -311,7 +311,7 @@
                                 <span class="badge border text-dark bg-light">{{ usu.get_cargo_display }}</span>
                             </td>
                             <td class="text-center">
-                                {% if usu.is_superuser %}
+                                {% if usu.is_superuser or usu.is_staff %}
                                     <span class="badge bg-danger text-white"><i class="fas fa-shield-alt me-1"></i> Intocável (Admin)</span>
                                 {% else %}
                                     {# Os botões precisam ser filhos diretos do .btn-group; por isso apontam para os forms via atributo form="" #}
@@ -348,7 +348,7 @@
                         </div>
                         
                         <div>
-                            {% if usu.is_superuser %}
+                            {% if usu.is_superuser or usu.is_staff %}
                                 <span class="badge bg-danger text-white p-2"><i class="fas fa-shield-alt"></i> Admin</span>
                             {% else %}
                                 <div class="d-flex flex-column gap-2">
@@ -373,7 +373,7 @@
             </div>
 
             <div class="card-footer bg-white pt-3">
-                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Ao resetar uma senha, uma nova senha aleatória é gerada e exibida uma única vez no aviso de sucesso. Administradores Master não podem ser alterados por aqui.</small>
+                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Ao resetar uma senha, uma nova senha aleatória é gerada e exibida uma única vez no aviso de sucesso. Administradores (superusuários e contas com acesso ao painel admin) não podem ser alterados por aqui.</small>
             </div>
         </div>
     </div>

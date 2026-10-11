@@ -9,17 +9,26 @@ para ações destrutivas).
 E a Fase 2 (multi-tenant): o modelo Clube, a migração que leva os dados
 existentes para o clube padrão e o isolamento entre clubes (nenhuma view
 ou formulário enxerga ou altera dados de outro clube).
+
+E a Fase 3: totais de pontos sem produto cartesiano e restritos ao mês (no
+fuso local, não UTC), web push fora da requisição e da transação (com
+timeout e sem envio duplicado) e remoção do código morto.
 """
 import html
+import importlib.util
 import inspect
+import json
 import re
 import secrets
 import string
-from datetime import date
+from datetime import date, datetime, timedelta
+from datetime import timezone as dt_timezone
 from html.parser import HTMLParser
 from io import StringIO
+from pathlib import Path
 from unittest import mock
 
+import requests
 from django.conf import settings
 from django.contrib.messages import constants as msg_constants
 from django.contrib.messages import get_messages
@@ -34,7 +43,11 @@ from django.test import (
 )
 from django.urls import reverse
 from django.utils import timezone
+from pywebpush import WebPushException
+from webpush.models import PushInformation, SubscriptionInfo
 
+from . import admin as core_admin
+from . import push
 from . import views as core_views
 from .forms import AvaliacaoForm, DesbravadorForm, EventoForm, PontoExtraForm
 from .models import (
@@ -505,10 +518,12 @@ class ResetSenhaTests(PainelDiretoriaTestCase):
 
 
 class ProtecaoSuperusuarioTests(PainelDiretoriaTestCase):
-    """Diretoria comum não altera superusuários nem reseta a própria senha.
+    """Diretoria comum não altera contas de administração nem a própria senha.
 
     Antes da Fase 1.5 os botões só eram escondidos no template: um POST
     direto redefinia a senha do superusuário (e a exibia) ou o desativava.
+    Contas is_staff também ficam protegidas: o /admin/ não é separado por
+    clube, então a senha exibida no reset daria acesso aos outros clubes.
     """
 
     @classmethod
@@ -618,8 +633,40 @@ class ProtecaoSuperusuarioTests(PainelDiretoriaTestCase):
         self.assertTrue(alvo.is_active)
         self.assertTrue(alvo.check_password('Pw-semstaff-123'))
 
-    def test_diretoria_altera_staff_que_nao_e_superusuario(self):
+    def _tenta_alterar(self, alvo):
+        """Tenta reset e toggle em `alvo`; mensagens novas de cada um."""
+        novas = []
+        for nome in ('reset_senha_diretoria', 'toggle_acesso'):
+            resp = self.client.post(reverse(nome, args=[alvo.pk]))
+            # só as mensagens desta requisição (as anteriores, ainda não
+            # exibidas, continuam no cookie de mensagens)
+            storage = get_messages(resp.wsgi_request)
+            novas.append(
+                [(m.level, m.message) for m in storage._queued_messages]
+            )
+        return novas
+
+    def test_diretoria_nao_altera_conta_staff(self):
+        """O guard também bloqueia alvos is_staff que não são superusuário."""
         self.client.force_login(self.diretor)
+        novas = self._tenta_alterar(self.staff_comum)
+        # reset e toggle recusados, sem exibir nenhuma senha
+        self.assertEqual(novas, [[(msg_constants.ERROR, MSG_ADMIN)]] * 2)
+        alvo = Usuario.objects.get(pk=self.staff_comum.pk)
+        self.assertTrue(alvo.is_active)
+        self.assertTrue(alvo.check_password('Pw-staffcomum-123'))
+
+    def test_diretoria_staff_nao_altera_outra_conta_staff(self):
+        """Ter is_staff não basta: só superusuário altera contas staff."""
+        self.client.force_login(self.diretor_staff)
+        novas = self._tenta_alterar(self.staff_comum)
+        self.assertEqual(novas, [[(msg_constants.ERROR, MSG_ADMIN)]] * 2)
+        alvo = Usuario.objects.get(pk=self.staff_comum.pk)
+        self.assertTrue(alvo.is_active)
+        self.assertTrue(alvo.check_password('Pw-staffcomum-123'))
+
+    def test_superusuario_altera_conta_staff(self):
+        self.client.force_login(self.diretor_admin)
         pk = self.staff_comum.pk
         resp = self.client.post(reverse('reset_senha_diretoria', args=[pk]))
         textos = [t for _, t in mensagens(resp) if t.startswith(MSG_SENHA)]
@@ -628,6 +675,19 @@ class ProtecaoSuperusuarioTests(PainelDiretoriaTestCase):
         alvo = Usuario.objects.get(pk=pk)
         self.assertFalse(alvo.is_active)
         self.assertTrue(alvo.check_password(textos[0][len(MSG_SENHA):]))
+
+    def test_painel_esconde_botoes_das_contas_de_administracao(self):
+        self.client.force_login(self.diretor)
+        body = self.client.get(reverse('painel_diretoria')).content.decode()
+        protegidos = (self.admin, self.diretor_admin, self.admin_sem_staff,
+                      self.diretor_staff, self.staff_comum)
+        for usu in protegidos:
+            with self.subTest(usuario=usu.username):
+                self.assertNotIn(f'/diretoria/acesso/{usu.pk}/"', body)
+                self.assertNotIn(f'/diretoria/reset-senha/{usu.pk}/"', body)
+        # contas comuns continuam com os botões
+        self.assertIn(f'/diretoria/acesso/{self.alvo.pk}/"', body)
+        self.assertIn(f'/diretoria/reset-senha/{self.alvo.pk}/"', body)
 
 
 class AprovarRecusarTests(PainelDiretoriaTestCase):
@@ -759,6 +819,38 @@ class PontosEmMassaTests(PainelDiretoriaTestCase):
         })
         self.assertEqual(PontoExtra.objects.count(), n)
         self.assertEqual(mensagens(resp)[0][0], msg_constants.WARNING)
+
+    def test_ignora_pendentes_e_inativos(self):
+        """Só membros ativos e aprovados recebem pontos em massa."""
+        Desbravador.objects.filter(pk=self.aprovado2.pk).update(ativo=False)
+        self.client.force_login(self.diretor)
+        resp = self.client.post(reverse('painel_diretoria'), {
+            'selecionados': [
+                str(self.aprovado.pk), str(self.aprovado2.pk),
+                str(self.pendente.pk),
+            ],
+            'pontos': '10',
+            'motivo': 'Só aptos',
+        })
+        premiados = PontoExtra.objects.filter(motivo='Só aptos')
+        self.assertEqual(
+            list(premiados.values_list('desbravador_id', flat=True)),
+            [self.aprovado.pk],
+        )
+        self.assertIn(
+            (msg_constants.SUCCESS, '1 desbravadores receberam 10 pontos!'),
+            mensagens(resp),
+        )
+
+    def test_ids_nao_numericos_sao_ignorados(self):
+        self.client.force_login(self.diretor)
+        resp = self.client.post(reverse('painel_diretoria'), {
+            'selecionados': ['abc', '1 OR 1=1', str(self.aprovado.pk)],
+            'pontos': '3',
+            'motivo': 'Ids',
+        })
+        self.assertRedireciona(resp, reverse('painel_diretoria'))
+        self.assertEqual(PontoExtra.objects.filter(motivo='Ids').count(), 1)
 
 
 class PainelRenderizadoTests(PainelDiretoriaTestCase):
@@ -1064,7 +1156,7 @@ class IsolamentoEntreClubesTests(PainelDiretoriaTestCase):
         cache.clear()  # o ranking fica em cache (locmem) entre os testes
 
     def _chaves_do_mes(self):
-        hoje = timezone.now()
+        hoje = timezone.localdate()
         return tuple(
             core_views.chave_cache_ranking(c.pk, hoje.month, hoje.year)
             for c in (self.clube, self.outro_clube)
@@ -1156,7 +1248,7 @@ class IsolamentoEntreClubesTests(PainelDiretoriaTestCase):
         self.assertContains(resp, 'Falcão Alheio')
         self.assertNotContains(resp, 'Águia')
         chave_nossa, chave_alheia = self._chaves_do_mes()
-        hoje = timezone.now()
+        hoje = timezone.localdate()
         self.assertEqual(
             chave_nossa,
             f'ranking_unidades_{self.clube.pk}_{hoje.month}_{hoje.year}',
@@ -1284,6 +1376,55 @@ class IsolamentoEntreClubesTests(PainelDiretoriaTestCase):
         self.assertFalse(EventoForm().fields['unidade'].queryset)
         self.assertFalse(PontoExtraForm().fields['desbravador'].queryset)
 
+    def _conselheiro_com_unidade_alheia(self):
+        """Dado inconsistente (gravado sem clean): unidade de outro clube."""
+        return Usuario.objects.create_user(
+            'inconsistente', password='Pw-incons-123', clube=self.clube,
+            unidade_responsavel=self.outra_unidade,
+        )
+
+    def test_minha_unidade_alheia_nao_lista_membros(self):
+        self.client.force_login(self._conselheiro_com_unidade_alheia())
+        resp = self.client.get(reverse('minha_unidade'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'Aprovado Alheio')
+
+    def test_ponto_extra_nao_oferece_membro_da_unidade_alheia(self):
+        form = PontoExtraForm(user=self._conselheiro_com_unidade_alheia())
+        self.assertNotIn(
+            self.outro_aprovado, form.fields['desbravador'].queryset
+        )
+
+    def test_unidade_alheia_no_perfil_nao_cadastra_membro(self):
+        self.client.force_login(self._conselheiro_com_unidade_alheia())
+        self.client.post(reverse('cadastrar_desbravador'), {
+            'nome_completo': 'Intruso', 'data_nascimento': '2012-05-05',
+            'ativo': 'on',
+        })
+        self.assertFalse(
+            Desbravador.objects.filter(nome_completo='Intruso').exists()
+        )
+
+    def test_unidade_alheia_no_perfil_nao_cria_evento(self):
+        self.client.force_login(self._conselheiro_com_unidade_alheia())
+        resp = self.client.post(reverse('cadastrar_evento'), {
+            'titulo': 'Cruzado', 'data_evento': '2026-11-20', 'descricao': '',
+        })
+        self.assertRedireciona(resp, reverse('calendario'))
+        self.assertFalse(Evento.objects.filter(titulo='Cruzado').exists())
+
+    def test_notificacao_com_unidade_nao_numerica_e_recusada(self):
+        self.client.force_login(self.diretor)
+        resp = self.client.post(reverse('enviar_notificacao_massa'), {
+            'titulo': 'Lixo', 'mensagem': 'x', 'publico_alvo': 'unidade',
+            'unidade_id': 'abc',
+        })
+        self.assertRedireciona(resp, reverse('painel_diretoria'))
+        self.assertIn(
+            (msg_constants.ERROR, 'Selecione uma unidade válida.'),
+            mensagens(resp),
+        )
+
 
 class ClubeModelTests(TestCase):
     """Fase 2: o modelo Clube e o vínculo obrigatório dos dados com ele."""
@@ -1369,6 +1510,19 @@ class ClubeModelTests(TestCase):
             evento.full_clean()
         self.assertIn('unidade', ctx.exception.message_dict)
 
+    def test_manager_aceita_clube_de_modelo_historico(self):
+        """Em migrations, o Clube é uma instância do modelo histórico."""
+        executor = MigrationExecutor(connection)
+        estado = executor.loader.project_state(
+            executor.loader.graph.leaf_nodes('core')
+        )
+        clube = estado.apps.get_model('core', 'Clube').objects.create(
+            nome='Histórico', slug='historico'
+        )
+        usuarios = estado.apps.get_model('core', 'Usuario').objects
+        usuario = usuarios.create_user('historico', password='x', clube=clube)
+        self.assertEqual(usuario.clube_id, clube.pk)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False, PASSWORD_HASHERS=HASHER_RAPIDO)
 class AdminClubeTests(TestCase):
@@ -1393,6 +1547,26 @@ class AdminClubeTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         novo = Usuario.objects.get(username='novo')
         self.assertEqual(novo.clube, self.clube)
+
+    def test_admin_mostra_o_clube_na_edicao(self):
+        self.client.force_login(self.root)
+        url = reverse('admin:core_usuario_change', args=[self.root.pk])
+        self.assertContains(self.client.get(url), 'name="clube"')
+
+    def test_unidade_nao_muda_de_clube_no_admin(self):
+        outro = Clube.objects.create(nome='Outro', slug='outro')
+        unidade = Unidade.objects.create(nome='Fixa', clube=self.clube)
+        self.client.force_login(self.root)
+        self.assertContains(
+            self.client.get(reverse('admin:core_unidade_add')), 'name="clube"'
+        )
+        url = reverse('admin:core_unidade_change', args=[unidade.pk])
+        self.assertNotContains(self.client.get(url), 'name="clube"')
+        self.client.post(url, {
+            'nome': 'Fixa', 'cor': 'bg-primary', 'clube': outro.pk,
+        })
+        unidade.refresh_from_db()
+        self.assertEqual(unidade.clube, self.clube)
 
     def test_listagens_do_admin_carregam(self):
         self.client.force_login(self.root)
@@ -1452,3 +1626,325 @@ class MigracaoClubePadraoTests(TransactionTestCase):
                     modelo.objects.count(),
                 )
                 self.assertFalse(modelo._meta.get_field('clube').null)
+
+
+class AgregacaoPontuacaoTests(PainelDiretoriaTestCase):
+    """Fase 3: totais sem produto cartesiano e restritos ao mês.
+
+    Somar avaliações e pontos extras no mesmo JOIN multiplicava as linhas:
+    com 2 avaliações (20 pts) e 3 extras (15 pts) o total saía 90 (60 + 30)
+    em vez de 35.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        hoje = timezone.localdate()
+        cls.inicio_mes, cls.fim_mes = core_views.intervalo_do_mes(
+            hoje.year, hoje.month
+        )
+        # unidade só com o membro do cenário
+        cls.unidade_teste = Unidade.objects.create(
+            nome='Lobo', clube=cls.clube
+        )
+        cls.membro = Desbravador.objects.create(
+            nome_completo='Membro Cartesiano',
+            data_nascimento=date(2012, 1, 1),
+            unidade=cls.unidade_teste, aprovado=True,
+        )
+        for _ in range(2):  # 2 x 10 = 20
+            AvaliacaoSemanal.objects.create(
+                desbravador=cls.membro, biblia=10, data=cls.inicio_mes
+            )
+        for _ in range(3):  # 3 x 5 = 15
+            PontoExtra.objects.create(
+                desbravador=cls.membro, motivo='Extra', pontos=5,
+                data=cls.inicio_mes,
+            )
+
+    def setUp(self):
+        cache.clear()
+        self.client.force_login(self.diretor)
+
+    def _no_ranking(self, unidade, params=None):
+        ranking = self.client.get(reverse('dashboard')).context['ranking']
+        return next(u for u in ranking if u.pk == unidade.pk)
+
+    def _no_relatorio(self, params=None):
+        resp = self.client.get(reverse('relatorio_mensal'), params or {})
+        dbv = next(
+            d for d in resp.context['relatorio'] if d.pk == self.membro.pk
+        )
+        return dbv.total_regular, dbv.total_extra, dbv.pontuacao_final
+
+    def _no_csv(self, params=None):
+        resp = self.client.get(reverse('exportar_relatorio_csv'), params or {})
+        for linha in resp.content.decode('utf-8-sig').splitlines():
+            colunas = linha.split(';')
+            if colunas[0] == 'Membro Cartesiano':
+                return tuple(int(c) for c in colunas[2:])
+        self.fail('membro ausente do CSV')
+
+    def test_dashboard_soma_sem_produto_cartesiano(self):
+        lobo = self._no_ranking(self.unidade_teste)
+        self.assertEqual(
+            (lobo.total_regular, lobo.total_extra, lobo.pontos), (20, 15, 35)
+        )
+        self.assertEqual(lobo.total_membros, 1)
+        # Águia (fixture base): 1 avaliação (10) + 1 extra (5), 2 membros
+        aguia = self._no_ranking(self.unidade)
+        self.assertEqual((aguia.pontos, aguia.total_membros), (15, 2))
+        ranking = self.client.get(reverse('dashboard')).context['ranking']
+        self.assertEqual(ranking[0].pk, self.unidade_teste.pk)
+        self.assertContains(self.client.get(reverse('dashboard')), '35 pts')
+
+    def test_relatorio_e_csv_somam_sem_produto_cartesiano(self):
+        self.assertEqual(self._no_relatorio(), (20, 15, 35))
+        self.assertEqual(self._no_csv(), (20, 15, 35))
+
+    def test_outros_meses_nao_entram_no_total_do_mes(self):
+        anterior = self.inicio_mes - timedelta(days=1)  # fim do mês anterior
+        for data, pontos in ((anterior, 100), (self.fim_mes, 50)):
+            AvaliacaoSemanal.objects.create(
+                desbravador=self.membro, biblia=10, uniforme=10, data=data
+            )
+            PontoExtra.objects.create(
+                desbravador=self.membro, motivo='Fora', pontos=pontos,
+                data=data,
+            )
+        self.assertEqual(self._no_ranking(self.unidade_teste).pontos, 35)
+        self.assertEqual(self._no_relatorio(), (20, 15, 35))
+        self.assertEqual(self._no_csv(), (20, 15, 35))
+        # e o mês anterior mostra só os pontos dele
+        params = {'mes': anterior.month, 'ano': anterior.year}
+        self.assertEqual(self._no_relatorio(params), (20, 100, 120))
+        self.assertEqual(self._no_csv(params), (20, 100, 120))
+
+    def test_ultimo_dia_do_mes_conta_e_primeiro_do_seguinte_nao(self):
+        ultimo_dia = self.fim_mes - timedelta(days=1)
+        AvaliacaoSemanal.objects.create(
+            desbravador=self.membro, biblia=10, data=ultimo_dia
+        )
+        PontoExtra.objects.create(
+            desbravador=self.membro, motivo='Seguinte', pontos=7,
+            data=self.fim_mes,
+        )
+        self.assertEqual(self._no_relatorio(), (30, 15, 45))
+
+    def test_mes_ou_ano_invalidos_voltam_ao_mes_atual(self):
+        hoje = timezone.localdate()
+        for params in ({'mes': '13'}, {'mes': '0'}, {'mes': 'abc'},
+                       {'ano': 'x'}, {'mes': '12', 'ano': '9999'}):
+            with self.subTest(params=params):
+                resp = self.client.get(reverse('relatorio_mensal'), params)
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(
+                    (resp.context['mes_selecionado'],
+                     resp.context['ano_selecionado']),
+                    (hoje.month, hoje.year),
+                )
+                resp = self.client.get(
+                    reverse('exportar_relatorio_csv'), params
+                )
+                self.assertEqual(resp.status_code, 200)
+
+    def test_fim_do_mes_usa_o_fuso_local_e_nao_utc(self):
+        """31/10 às 22:30 em Brasília já é 01/11 em UTC: ainda é outubro."""
+        unidade = Unidade.objects.create(nome='Coruja', clube=self.clube)
+        membro = Desbravador.objects.create(
+            nome_completo='Membro Noturno', data_nascimento=date(2012, 1, 1),
+            unidade=unidade, aprovado=True,
+        )
+        AvaliacaoSemanal.objects.create(
+            desbravador=membro, biblia=10, data=date(2026, 10, 31)
+        )
+        agora_utc = datetime(2026, 11, 1, 1, 30, tzinfo=dt_timezone.utc)
+        chave = core_views.chave_cache_ranking
+        with mock.patch('django.utils.timezone.now', return_value=agora_utc):
+            self.assertEqual(timezone.localdate(), date(2026, 10, 31))
+            self.client.force_login(self.diretor)
+            coruja = self._no_ranking(unidade)
+            # o ranking foi para o cache de outubro, não de novembro
+            self.assertIsNotNone(cache.get(chave(self.clube.pk, 10, 2026)))
+            self.assertIsNone(cache.get(chave(self.clube.pk, 11, 2026)))
+            relatorio = self.client.get(reverse('relatorio_mensal'))
+            self.client.post(reverse('painel_diretoria'), {
+                'selecionados': [str(membro.pk)], 'pontos': '3',
+                'motivo': 'Noite',
+            })
+        self.assertEqual(coruja.pontos, 10)
+        self.assertEqual(
+            (relatorio.context['mes_selecionado'],
+             relatorio.context['ano_selecionado']),
+            (10, 2026),
+        )
+        ponto = PontoExtra.objects.get(motivo='Noite')
+        self.assertEqual(ponto.data, date(2026, 10, 31))
+
+    def test_avaliacao_invalida_o_cache_do_mes_da_avaliacao(self):
+        anterior = self.inicio_mes - timedelta(days=1)
+        chave = core_views.chave_cache_ranking(
+            self.clube.pk, anterior.month, anterior.year
+        )
+        cache.set(chave, 'antigo', 600)
+        dados = {
+            nome: campo.initial
+            for nome, campo in AvaliacaoForm().fields.items()
+        }
+        dados.update(data=anterior.isoformat(), observacao='')
+        self.client.post(
+            reverse('avaliar_membro', args=[self.membro.pk]), dados
+        )
+        self.assertIsNone(cache.get(chave))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, PASSWORD_HASHERS=HASHER_RAPIDO)
+class PushNotificacaoTests(TestCase):
+    """Fase 3: push fora da requisição/transação, com timeout, sem duplicar."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.clube = Clube.objects.create(nome='Clube Push', slug='clube-push')
+        cls.diretor = Usuario.objects.create_user(
+            'diretor-push', password='Pw-dirpush-123', is_diretoria=True,
+            clube=cls.clube,
+        )
+        cls.u1 = Usuario.objects.create_user(
+            'u1', password='Pw-u1-12345', clube=cls.clube
+        )
+        cls.u2 = Usuario.objects.create_user(
+            'u2', password='Pw-u2-12345', clube=cls.clube
+        )
+        cls.inscricao = SubscriptionInfo.objects.create(
+            browser='chrome', endpoint='https://push.example/abc',
+            auth='auth', p256dh='p256dh',
+        )
+        PushInformation.objects.create(user=cls.u1, subscription=cls.inscricao)
+
+    def _notificar(self, titulo, usuarios):
+        notificacao = NotificacaoManual.objects.create(
+            clube=self.clube, titulo=titulo, mensagem='m'
+        )
+        notificacao.destinatarios.set(usuarios)
+        return notificacao
+
+    def test_avisos_criados_e_push_so_depois_do_commit(self):
+        with mock.patch('core.push.executor_do_processo') as executor, \
+                self.captureOnCommitCallbacks() as callbacks:
+            self._notificar('Aviso', [self.u1, self.u2])
+            # avisos in-app já existem; o push espera o commit
+            self.assertEqual(
+                NotificacaoInApp.objects.filter(titulo='Aviso').count(), 2
+            )
+            executor.return_value.submit.assert_not_called()
+        self.assertEqual(len(callbacks), 1)
+        with mock.patch('core.push.usar_threads', return_value=True), \
+                mock.patch('core.push.executor_do_processo') as executor:
+            callbacks[0]()
+        executor.return_value.submit.assert_called_once()
+        _, ids, payload = executor.return_value.submit.call_args.args
+        self.assertEqual(sorted(ids), sorted([self.u1.pk, self.u2.pk]))
+        self.assertEqual(payload['head'], 'Aviso')
+
+    def test_requisicao_so_agenda_o_envio_no_pool_de_threads(self):
+        self.client.force_login(self.diretor)
+        with mock.patch('core.push.usar_threads', return_value=True), \
+                mock.patch('core.push.executor_do_processo') as executor, \
+                mock.patch('core.push.enviar_push_para_usuarios') as enviar, \
+                self.captureOnCommitCallbacks(execute=True):
+            resp = self.client.post(reverse('enviar_notificacao_massa'), {
+                'titulo': 'Massa', 'mensagem': 'm', 'publico_alvo': 'todos',
+            })
+        self.assertEqual(resp.status_code, 302)
+        executor.return_value.submit.assert_called_once()
+        enviar.assert_not_called()  # nada de rede na thread da requisição
+
+    def test_sem_threads_envia_depois_do_commit_de_forma_sincrona(self):
+        with mock.patch('core.push.usar_threads', return_value=False), \
+                mock.patch('core.push.enviar_push_para_usuarios') as enviar:
+            with self.captureOnCommitCallbacks() as callbacks:
+                self._notificar('Sincrono', [self.u1])
+                enviar.assert_not_called()
+            for callback in callbacks:
+                callback()
+        enviar.assert_called_once()
+
+    def test_cada_envio_tem_timeout(self):
+        with mock.patch('core.push.webpush') as webpush:
+            push.enviar_push_para_usuarios(
+                [self.u1.pk, self.u2.pk], {'head': 'x'}
+            )
+        webpush.assert_called_once()  # só u1 tem inscrição
+        kwargs = webpush.call_args.kwargs
+        self.assertEqual(push.TIMEOUT_PUSH, 5)
+        self.assertEqual(kwargs['timeout'], push.TIMEOUT_PUSH)
+        self.assertEqual(
+            kwargs['subscription_info']['endpoint'], self.inscricao.endpoint
+        )
+        self.assertEqual(json.loads(kwargs['data']), {'head': 'x'})
+
+    def test_inscricao_expirada_e_removida(self):
+        erro = WebPushException('gone', response=mock.Mock(status_code=410))
+        with mock.patch('core.push.webpush', side_effect=erro):
+            push.enviar_push_para_usuarios([self.u1.pk], {})
+        self.assertFalse(
+            SubscriptionInfo.objects.filter(pk=self.inscricao.pk).exists()
+        )
+
+    def test_falha_de_rede_nao_impede_as_demais_inscricoes(self):
+        """Um serviço de push lento não derruba os envios seguintes."""
+        outra = SubscriptionInfo.objects.create(
+            browser='firefox', endpoint='https://push.example/def',
+            auth='auth2', p256dh='p256dh2',
+        )
+        PushInformation.objects.create(user=self.u2, subscription=outra)
+        with mock.patch('core.push.webpush',
+                        side_effect=[requests.Timeout('lento'), None]) as wp, \
+                self.assertLogs('core.push', 'WARNING'):
+            push.enviar_push_para_usuarios([self.u1.pk, self.u2.pk], {})
+        self.assertEqual(wp.call_count, 2)
+        self.assertTrue(
+            SubscriptionInfo.objects.filter(pk=self.inscricao.pk).exists()
+        )
+
+    def test_admin_envia_cada_push_uma_unica_vez(self):
+        root = Usuario.objects.create_superuser(
+            'root-push', password='Pw-rootpush-123', clube=self.clube
+        )
+        self.client.force_login(root)
+        with mock.patch('core.push.usar_threads', return_value=False), \
+                mock.patch('core.push.webpush') as webpush, \
+                self.captureOnCommitCallbacks(execute=True):
+            resp = self.client.post(
+                reverse('admin:core_notificacaomanual_add'),
+                {'clube': self.clube.pk, 'titulo': 'Pelo admin',
+                 'mensagem': 'm', 'destinatarios': [self.u1.pk, self.u2.pk]},
+            )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(webpush.call_count, 1)  # 1 inscrição, 1 envio
+        self.assertEqual(
+            NotificacaoInApp.objects.filter(titulo='Pelo admin').count(), 2
+        )
+        self.assertNotIn(
+            'send_user_notification', inspect.getsource(core_admin)
+        )
+
+    def test_sinal_tambem_funciona_pelo_lado_do_usuario(self):
+        notificacao = NotificacaoManual.objects.create(
+            clube=self.clube, titulo='Reversa', mensagem='m'
+        )
+        with mock.patch('core.models.agendar_push') as agendar:
+            self.u2.notificacaomanual_set.add(notificacao)
+        agendar.assert_called_once()
+        self.assertEqual(list(agendar.call_args.args[0]), [self.u2.pk])
+        self.assertTrue(NotificacaoInApp.objects.filter(
+            usuario=self.u2, titulo='Reversa'
+        ).exists())
+
+
+class CodigoMortoTests(TestCase):
+    def test_core_utils_foi_removido(self):
+        """O Calendar HTML legado (sem escape e sem filtro de clube) saiu."""
+        caminho = Path(settings.BASE_DIR) / 'core' / 'utils.py'
+        self.assertFalse(caminho.exists())
+        self.assertIsNone(importlib.util.find_spec('core.utils'))

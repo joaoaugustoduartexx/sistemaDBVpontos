@@ -1,5 +1,3 @@
-import logging
-
 from django.db import models
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.core.exceptions import ValidationError
@@ -7,9 +5,8 @@ from django.utils import timezone
 from django.conf import settings
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
-from webpush import send_user_notification
 
-logger = logging.getLogger(__name__)
+from .push import agendar_push
 
 
 # 0. CLUBES (TENANT)
@@ -66,7 +63,8 @@ class UsuarioManager(UserManager):
 
     def _create_user_object(self, username, email, password, **extra_fields):
         clube = extra_fields.get('clube')
-        if clube is not None and not isinstance(clube, Clube):
+        # models.Model (e não Clube): em migrations o clube é uma instância do modelo histórico
+        if clube is not None and not isinstance(clube, models.Model):
             extra_fields['clube_id'] = extra_fields.pop('clube')
         return super()._create_user_object(username, email, password, **extra_fields)
 
@@ -311,27 +309,25 @@ class NotificacaoInApp(models.Model):
 def processar_disparo_notificacao(sender, instance, action, pk_set, **kwargs):
     """Dispara uma NotificacaoManual para os destinatários recém-adicionados (action post_add).
 
-    Para cada usuário, cria o aviso in-app (NotificacaoInApp, via get_or_create) e envia o web push de forma
-    síncrona, dentro da chamada add()/set(); falhas no push são registradas pelo logger e não interrompem o laço.
+    Cria os avisos in-app (NotificacaoInApp) de uma vez e agenda o web push para depois do commit:
+    o envio roda fora da requisição e da transação, com timeout (ver core/push.py).
     """
-    if action == "post_add":
-        for user_id in pk_set:
-            user = Usuario.objects.get(id=user_id)
+    if action != "post_add" or not pk_set:
+        return
+    if kwargs.get('reverse'):
+        # usuario.notificacaomanual_set.add(...): instance é o usuário e pk_set são notificações
+        envios = [(n, [instance.pk]) for n in NotificacaoManual.objects.filter(pk__in=pk_set)]
+    else:
+        envios = [(instance, pk_set)]
 
-            NotificacaoInApp.objects.get_or_create(
-                usuario=user,
-                titulo=instance.titulo,
-                mensagem=instance.mensagem,
-                data_criacao=instance.criado_em
-            )
-
-            # MUDANÇA SÊNIOR: Aponta direto para a rota de notificações cheia
-            payload = {
-                "head": instance.titulo,
-                "body": instance.mensagem,
-                "url": "/notificacoes/"
-            }
-            try:
-                send_user_notification(user=user, payload=payload, ttl=1000)
-            except Exception as e:
-                logger.error(f"Falha ao enviar push notification para {user.username}: {e}")
+    for notificacao, usuario_ids in envios:
+        NotificacaoInApp.objects.bulk_create([
+            NotificacaoInApp(usuario_id=uid, titulo=notificacao.titulo, mensagem=notificacao.mensagem)
+            for uid in usuario_ids
+        ])
+        # Aponta direto para a rota de notificações cheia
+        agendar_push(usuario_ids, {
+            "head": notificacao.titulo,
+            "body": notificacao.mensagem,
+            "url": "/notificacoes/",
+        })
