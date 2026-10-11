@@ -95,6 +95,10 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Obrigatório para o PythonAnywhere
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
+# Uploads (ex.: logo dos clubes); a pasta media/ fica fora do git
+MEDIA_URL = 'media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 # --- CONFIGURAÇÕES DO SISTEMA DBV ---
 
 # Usar nosso modelo de usuário personalizado

@@ -35,6 +35,11 @@ CARACTERES_SENHA = string.ascii_letters + string.digits
 TAMANHO_SENHA_RESETADA = 8
 
 
+def chave_cache_ranking(clube_id, mes, ano):
+    """Chave do cache do ranking mensal, separada por clube (tenant)."""
+    return f'ranking_unidades_{clube_id}_{mes}_{ano}'
+
+
 # --- CONFIGURAÇÃO PWA ---
 def manifest(request):
     """Renderiza o manifest.json do PWA (rota pública, sem login)."""
@@ -51,21 +56,23 @@ def service_worker(request):
 def dashboard(request):
     """Exibe o ranking mensal das unidades (avaliações semanais + pontos extras do mês atual).
 
-    O resultado fica em cache por 10 minutos na chave ranking_unidades_<mês>_<ano>.
+    Só entram as unidades do clube do usuário. O resultado fica em cache por
+    10 minutos numa chave por clube (ranking_unidades_<clube>_<mês>_<ano>).
     """
     hoje = timezone.now()
     mes_atual = hoje.month
     ano_atual = hoje.year
+    clube_id = request.user.clube_id
 
-    # 1. Cria uma chave de cache única para o mês atual
-    chave_cache = f'ranking_unidades_{mes_atual}_{ano_atual}'
+    # 1. Chave de cache única por clube e mês (não vaza entre clubes)
+    chave_cache = chave_cache_ranking(clube_id, mes_atual, ano_atual)
 
     # 2. Tenta pegar o ranking pronto da memória RAM do servidor
     ranking = cache.get(chave_cache)
 
     # 3. Se o cache estiver vazio (ou tiver expirado), fazemos o cálculo pesado
     if not ranking:
-        ranking = Unidade.objects.annotate(
+        ranking = Unidade.objects.filter(clube_id=clube_id).annotate(
             pontos=Coalesce(Sum(
                 F('membros__avaliacoes__biblia') + F('membros__avaliacoes__uniforme') +
                 F('membros__avaliacoes__lenco') + F('membros__avaliacoes__fazer_ideal') +
@@ -96,7 +103,9 @@ def avaliar_membro(request, id_desbravador):
     Permitido à diretoria ou ao responsável pela unidade do membro. Ao salvar, invalida o cache do
     ranking do mês e redireciona para o painel da diretoria ou para "minha unidade".
     """
-    membro = get_object_or_404(Desbravador, id=id_desbravador)
+    membro = get_object_or_404(
+        Desbravador, id=id_desbravador, unidade__clube_id=request.user.clube_id
+    )
 
     if not request.user.is_diretoria and membro.unidade != request.user.unidade_responsavel:
         messages.error(request, "Você não tem permissão para pontuar membros de outra unidade.")
@@ -113,7 +122,9 @@ def avaliar_membro(request, id_desbravador):
 
             # Invalida o cache para que o ranking atualize imediatamente
             hoje = timezone.now()
-            cache.delete(f'ranking_unidades_{hoje.month}_{hoje.year}')
+            cache.delete(chave_cache_ranking(
+                request.user.clube_id, hoje.month, hoje.year
+            ))
 
             if request.user.is_diretoria:
                 return redirect('painel_diretoria')
@@ -131,10 +142,13 @@ def painel_diretoria(request):
 
     POST: lança pontos extras para os desbravadores selecionados e invalida o cache do ranking.
     GET: lista membros (busca e filtro por unidade), observações recentes, usuários e cadastros pendentes.
+    Tudo restrito ao clube do usuário.
     """
     if not request.user.is_diretoria:
         messages.error(request, "Acesso Negado: Área restrita à Diretoria.")
         return redirect('dashboard')
+
+    clube_id = request.user.clube_id
 
     if request.method == 'POST':
         # Desktop e mobile enviam checkboxes com o mesmo nome; o set() evita
@@ -144,10 +158,16 @@ def painel_diretoria(request):
         motivo = request.POST.get('motivo')
 
         if ids_selecionados and pontos and motivo:
+            # Só membros ativos e aprovados do próprio clube: ids de outro
+            # clube (ou inválidos) são ignorados
+            membros = Desbravador.objects.filter(
+                id__in=[i for i in ids_selecionados if i.isdigit()],
+                unidade__clube_id=clube_id, ativo=True, aprovado=True,
+            )
             count = 0
-            for dbv_id in ids_selecionados:
+            for membro in membros:
                 PontoExtra.objects.create(
-                    desbravador_id=dbv_id,
+                    desbravador=membro,
                     autor=request.user,
                     pontos=int(pontos),
                     motivo=motivo,
@@ -157,7 +177,7 @@ def painel_diretoria(request):
 
             # Invalida o cache para o ranking atualizar imediatamente
             hoje = timezone.now()
-            cache.delete(f'ranking_unidades_{hoje.month}_{hoje.year}')
+            cache.delete(chave_cache_ranking(clube_id, hoje.month, hoje.year))
 
             messages.success(request, f"{count} desbravadores receberam {pontos} pontos!")
         else:
@@ -168,7 +188,9 @@ def painel_diretoria(request):
     unidade_filtro = request.GET.get('unidade')
 
     desbravadores = (
-        Desbravador.objects.filter(ativo=True, aprovado=True)
+        Desbravador.objects.filter(
+            unidade__clube_id=clube_id, ativo=True, aprovado=True
+        )
         .select_related('unidade')
         .order_by('unidade__nome', 'nome_completo')
     )
@@ -179,18 +201,24 @@ def painel_diretoria(request):
     if unidade_filtro:
         desbravadores = desbravadores.filter(unidade_id=unidade_filtro)
 
-    unidades = Unidade.objects.all()
+    unidades = Unidade.objects.filter(clube_id=clube_id)
 
     observacoes = (
-        AvaliacaoSemanal.objects.select_related('desbravador', 'autor')
+        AvaliacaoSemanal.objects
+        .filter(desbravador__unidade__clube_id=clube_id)
+        .select_related('desbravador', 'autor')
         .exclude(observacao__exact='')
         .exclude(observacao__isnull=True)
         .order_by('-data')[:30]
     )
 
-    todos_usuarios = Usuario.objects.all().order_by('username')
+    todos_usuarios = (
+        Usuario.objects.filter(clube_id=clube_id).order_by('username')
+    )
     pendentes = (
-        Desbravador.objects.filter(ativo=True, aprovado=False)
+        Desbravador.objects.filter(
+            unidade__clube_id=clube_id, ativo=True, aprovado=False
+        )
         .select_related('unidade')
         .order_by('nome_completo')
     )
@@ -220,7 +248,9 @@ def relatorio_mensal(request):
     mes = int(request.GET.get('mes', hoje.month))
     ano = int(request.GET.get('ano', hoje.year))
 
-    relatorio = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
+    relatorio = Desbravador.objects.filter(
+        unidade__clube_id=request.user.clube_id, ativo=True, aprovado=True
+    ).select_related('unidade').annotate(
         total_regular=Coalesce(
             Sum(TOTAL_REGULAR_EXPR, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0
         ),
@@ -247,7 +277,10 @@ def minha_unidade(request):
         messages.warning(request, "Você não é conselheiro de nenhuma unidade.")
         return redirect('dashboard')
 
-    membros = Desbravador.objects.filter(unidade=unidade, ativo=True, aprovado=True)
+    membros = Desbravador.objects.filter(
+        unidade=unidade, unidade__clube_id=request.user.clube_id,
+        ativo=True, aprovado=True,
+    )
     return render(request, 'core/minha_unidade.html', {'unidade': unidade, 'membros': membros})
 
 
@@ -304,6 +337,7 @@ def cadastrar_evento(request):
     """Cria um evento no calendário (diretoria ou usuário com unidade).
 
     Eventos criados por quem não é da diretoria ficam vinculados à unidade do autor.
+    O evento sempre pertence ao clube do autor.
     """
     if not request.user.is_diretoria and not request.user.unidade_responsavel:
         messages.error(request, "Sem permissão.")
@@ -314,6 +348,7 @@ def cadastrar_evento(request):
         if form.is_valid():
             evento = form.save(commit=False)
             evento.autor = request.user
+            evento.clube_id = request.user.clube_id
             if not request.user.is_diretoria:
                 evento.unidade = request.user.unidade_responsavel
             evento.save()
@@ -342,7 +377,9 @@ def exportar_relatorio_csv(request):
     writer = csv.writer(response, delimiter=';')
     writer.writerow(['Desbravador', 'Unidade', 'Pontos Regulares', 'Pontos Extras', 'Pontuacao Total'])
 
-    desbravadores = Desbravador.objects.filter(ativo=True, aprovado=True).select_related('unidade').annotate(
+    desbravadores = Desbravador.objects.filter(
+        unidade__clube_id=request.user.clube_id, ativo=True, aprovado=True
+    ).select_related('unidade').annotate(
         total_regular=Coalesce(
             Sum(TOTAL_REGULAR_EXPR, filter=Q(avaliacoes__data__month=mes, avaliacoes__data__year=ano)), 0
         ),
@@ -383,7 +420,9 @@ def toggle_acesso(request, user_id):
     """
     if not request.user.is_diretoria:
         return redirect('dashboard')
-    usuario_alvo = get_object_or_404(Usuario, id=user_id)
+    usuario_alvo = get_object_or_404(
+        Usuario, id=user_id, clube_id=request.user.clube_id
+    )
     if usuario_alvo == request.user:
         return redirect('painel_diretoria')
     if usuario_alvo.is_superuser and not request.user.is_superuser:
@@ -408,7 +447,9 @@ def reset_senha_diretoria(request, user_id):
     """
     if not request.user.is_diretoria:
         return redirect('dashboard')
-    usuario = get_object_or_404(Usuario, id=user_id)
+    usuario = get_object_or_404(
+        Usuario, id=user_id, clube_id=request.user.clube_id
+    )
     if usuario == request.user:
         messages.error(
             request, 'Para alterar a sua própria senha, use o menu "Senha".'
@@ -437,7 +478,9 @@ def aprovar_membro(request, id_dbv):
     """Aprova o cadastro de um desbravador (somente POST e diretoria)."""
     if not request.user.is_diretoria:
         return redirect('dashboard')
-    membro = get_object_or_404(Desbravador, id=id_dbv)
+    membro = get_object_or_404(
+        Desbravador, id=id_dbv, unidade__clube_id=request.user.clube_id
+    )
     membro.aprovado = True
     membro.save()
     return redirect('painel_diretoria')
@@ -453,7 +496,9 @@ def recusar_membro(request, id_dbv):
     """
     if not request.user.is_diretoria:
         return redirect('dashboard')
-    membro = get_object_or_404(Desbravador, id=id_dbv)
+    membro = get_object_or_404(
+        Desbravador, id=id_dbv, unidade__clube_id=request.user.clube_id
+    )
     if membro.aprovado:
         messages.error(
             request, "Membros já aprovados não podem ser excluídos."
@@ -503,6 +548,7 @@ def calendario(request):
     """Exibe o calendário mensal de eventos (parâmetros GET "mes" e "ano").
 
     A diretoria vê todos os eventos; os demais veem os da própria unidade e os globais (sem unidade).
+    Sempre apenas eventos do clube do usuário.
     """
     hoje = date.today()
     ano = int(request.GET.get('ano', hoje.year))
@@ -516,8 +562,10 @@ def calendario(request):
         ano -= 1
 
     # Busca otimizada (com select_related para evitar N+1 queries)
+    clube_id = request.user.clube_id
     if request.user.is_diretoria:
         eventos = Evento.objects.filter(
+            clube_id=clube_id,
             data_evento__year=ano,
             data_evento__month=mes
         ).select_related('unidade', 'autor')
@@ -525,6 +573,7 @@ def calendario(request):
         unidade_usuario = request.user.unidade_responsavel
         eventos = Evento.objects.filter(
             Q(unidade=unidade_usuario) | Q(unidade__isnull=True),
+            clube_id=clube_id,
             data_evento__year=ano,
             data_evento__month=mes
         ).select_related('unidade', 'autor')
@@ -564,13 +613,14 @@ def calendario(request):
 def enviar_notificacao_massa(request):
     """Envia uma notificação manual em massa (somente POST e diretoria).
 
-    Filtra usuários ativos pelo público-alvo (todos, conselheiros ou uma unidade) e cria a
-    NotificacaoManual; o sinal m2m_changed gera os avisos in-app e dispara o web push.
+    Filtra usuários ativos do clube pelo público-alvo (todos, conselheiros ou uma unidade do
+    clube) e cria a NotificacaoManual; o sinal m2m_changed gera os avisos in-app e dispara o web push.
     """
     if not request.user.is_diretoria:
         messages.error(request, "Acesso Negado: Área restrita à Diretoria.")
         return redirect('dashboard')
 
+    clube_id = request.user.clube_id
     titulo = request.POST.get('titulo')
     mensagem = request.POST.get('mensagem')
     publico_alvo = request.POST.get('publico_alvo')
@@ -580,12 +630,16 @@ def enviar_notificacao_massa(request):
         messages.error(request, "Preencha todos os campos obrigatórios para enviar a notificação.")
         return redirect('painel_diretoria')
 
-    usuarios = Usuario.objects.filter(is_active=True)
+    usuarios = Usuario.objects.filter(is_active=True, clube_id=clube_id)
 
     if publico_alvo == 'conselheiros':
         usuarios = usuarios.filter(cargo=Usuario.Cargos.CONSELHEIRO)
     elif publico_alvo == 'unidade':
-        if not unidade_id:
+        # A unidade precisa existir e ser do próprio clube
+        unidade_valida = bool(unidade_id) and unidade_id.isdigit() and (
+            Unidade.objects.filter(id=unidade_id, clube_id=clube_id).exists()
+        )
+        if not unidade_valida:
             messages.error(request, "Selecione uma unidade válida.")
             return redirect('painel_diretoria')
         usuarios = usuarios.filter(unidade_responsavel_id=unidade_id)
@@ -596,6 +650,7 @@ def enviar_notificacao_massa(request):
 
     # O M2M_CHANGED signal configurado no modelo irá cuidar do disparo do webpush
     nova_notificacao = NotificacaoManual.objects.create(
+        clube_id=clube_id,
         titulo=titulo,
         mensagem=mensagem
     )

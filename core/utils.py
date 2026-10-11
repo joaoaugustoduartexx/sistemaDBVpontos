@@ -2,6 +2,7 @@ from calendar import HTMLCalendar
 from datetime import date
 from .models import Evento
 
+
 class Calendar(HTMLCalendar):
     def __init__(self, ano=None, mes=None, unidade=None):
         self.year = ano
@@ -46,10 +47,10 @@ class Calendar(HTMLCalendar):
         d = ''
         for evento in eventos:
             descricao_texto = evento.descricao if evento.descricao else "Sem descrição."
-            
+
             d += f'''
-                <li class="evento-item" 
-                    data-bs-toggle="modal" 
+                <li class="evento-item"
+                    data-bs-toggle="modal"
                     data-bs-target="#verEventoModal"
                     data-titulo="{evento.titulo}"
                     data-data="{evento.data_evento.strftime('%d/%m/%Y')}"
@@ -69,7 +70,7 @@ class Calendar(HTMLCalendar):
         return f'<tr> {week} </tr>'
 
     def formatmonth(self, withyear=True):
-        cal = f'<table border="0" cellpadding="0" cellspacing="0" class="calendar table table-bordered">\n'
+        cal = '<table border="0" cellpadding="0" cellspacing="0" class="calendar table table-bordered">\n'
         # Aqui ele chama nossas funções traduzidas acima
         cal += f'{self.formatmonthname(self.year, self.month, withyear=withyear)}\n'
         cal += f'{self.formatweekheader()}\n'

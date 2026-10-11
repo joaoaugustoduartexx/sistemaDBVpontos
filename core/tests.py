@@ -5,6 +5,10 @@ com CSRF, autorização (inclusive a proteção de superusuários), senha
 aleatória no reset, recusa apenas de cadastros pendentes, pontos em massa
 sem duplicidade e renderização segura do painel (sem XSS e sem links GET
 para ações destrutivas).
+
+E a Fase 2 (multi-tenant): o modelo Clube, a migração que leva os dados
+existentes para o clube padrão e o isolamento entre clubes (nenhuma view
+ou formulário enxerga ou altera dados de outro clube).
 """
 import html
 import inspect
@@ -13,19 +17,29 @@ import secrets
 import string
 from datetime import date
 from html.parser import HTMLParser
+from io import StringIO
 from unittest import mock
 
 from django.conf import settings
 from django.contrib.messages import constants as msg_constants
 from django.contrib.messages import get_messages
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import models
-from django.test import Client, TestCase, override_settings
+from django.core.management.base import CommandError
+from django.db import IntegrityError, connection, models, transaction
+from django.db.migrations.executor import MigrationExecutor
+from django.test import (
+    Client, TestCase, TransactionTestCase, override_settings,
+)
 from django.urls import reverse
+from django.utils import timezone
 
 from . import views as core_views
+from .forms import AvaliacaoForm, DesbravadorForm, EventoForm, PontoExtraForm
 from .models import (
-    AvaliacaoSemanal, Desbravador, PontoExtra, Unidade, Usuario,
+    AvaliacaoSemanal, Clube, Desbravador, Evento, NotificacaoInApp,
+    NotificacaoManual, PontoExtra, Unidade, Usuario,
 )
 
 ALFANUMERICOS = set(string.ascii_letters + string.digits)
@@ -129,19 +143,26 @@ class PainelDiretoriaTestCase(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.unidade = Unidade.objects.create(nome='Águia', cor='bg-primary')
+        # Fase 2: todo dado pertence a um clube (tenant)
+        cls.clube = Clube.objects.create(
+            nome='Clube Teste', slug='clube-teste'
+        )
+        cls.unidade = Unidade.objects.create(
+            nome='Águia', cor='bg-primary', clube=cls.clube
+        )
         cls.diretor = Usuario.objects.create_user(
-            'diretor', password='Pw-diretor-123', is_diretoria=True
+            'diretor', password='Pw-diretor-123', is_diretoria=True,
+            clube=cls.clube,
         )
         cls.comum = Usuario.objects.create_user(
             'conselheiro', password='Pw-comum-123',
-            unidade_responsavel=cls.unidade,
+            unidade_responsavel=cls.unidade, clube=cls.clube,
         )
         cls.alvo = Usuario.objects.create_user(
-            'alvo', password='Pw-alvo-123'
+            'alvo', password='Pw-alvo-123', clube=cls.clube
         )
         cls.admin = Usuario.objects.create_superuser(
-            'master', password='Pw-master-123'
+            'master', password='Pw-master-123', clube=cls.clube
         )
         cls.pendente = cls.criar_membro(NOME_XSS, aprovado=False)
         cls.pendente2 = cls.criar_membro('Pendente Dois', aprovado=False)
@@ -332,6 +353,20 @@ class AutorizacaoTests(PainelDiretoriaTestCase):
                 resp = self.client.post(reverse(nome, args=[999999]))
                 self.assertEqual(resp.status_code, 404)
 
+    def test_painel_restrito_a_diretoria(self):
+        """Quem não é diretoria não vê o painel nem lança pontos em massa."""
+        self.client.force_login(self.comum)
+        url = reverse('painel_diretoria')
+        self.assertRedireciona(self.client.get(url), reverse('dashboard'))
+        n = PontoExtra.objects.count()
+        resp = self.client.post(url, {
+            'selecionados': [str(self.aprovado.pk)],
+            'pontos': '-50',
+            'motivo': 'Sem permissão',
+        })
+        self.assertRedireciona(resp, reverse('dashboard'))
+        self.assertEqual(PontoExtra.objects.count(), n)
+
 
 class ToggleAcessoTests(PainelDiretoriaTestCase):
     def test_alterna_is_active_nos_dois_sentidos(self):
@@ -480,7 +515,22 @@ class ProtecaoSuperusuarioTests(PainelDiretoriaTestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.diretor_admin = Usuario.objects.create_superuser(
-            'diretor-admin', password='Pw-diradmin-123', is_diretoria=True
+            'diretor-admin', password='Pw-diradmin-123', is_diretoria=True,
+            clube=cls.clube,
+        )
+        # diretoria com acesso ao /admin/ (is_staff), sem ser superusuário
+        cls.diretor_staff = Usuario.objects.create_user(
+            'diretor-staff', password='Pw-dirstaff-123',
+            is_diretoria=True, is_staff=True, clube=cls.clube,
+        )
+        # superusuário com is_staff desmarcado no admin
+        cls.admin_sem_staff = Usuario.objects.create_user(
+            'admin-sem-staff', password='Pw-semstaff-123',
+            is_superuser=True, clube=cls.clube,
+        )
+        cls.staff_comum = Usuario.objects.create_user(
+            'staff-comum', password='Pw-staffcomum-123', is_staff=True,
+            clube=cls.clube,
         )
 
     def test_diretoria_nao_redefine_senha_de_superusuario(self):
@@ -537,6 +587,47 @@ class ProtecaoSuperusuarioTests(PainelDiretoriaTestCase):
         self.client.force_login(self.diretor_admin)
         self.client.post(reverse('toggle_acesso', args=[self.admin.pk]))
         self.assertFalse(Usuario.objects.get(pk=self.admin.pk).is_active)
+
+    def test_diretoria_staff_nao_redefine_senha_de_superusuario(self):
+        """O guard olha is_superuser do solicitante, e não is_staff."""
+        self.client.force_login(self.diretor_staff)
+        resp = self.client.post(
+            reverse('reset_senha_diretoria', args=[self.admin.pk])
+        )
+        self.assertRedireciona(resp, reverse('painel_diretoria'))
+        admin = Usuario.objects.get(pk=self.admin.pk)
+        self.assertTrue(admin.check_password('Pw-master-123'))
+        self.assertIn((msg_constants.ERROR, MSG_ADMIN), mensagens(resp))
+
+    def test_diretoria_staff_nao_desativa_superusuario(self):
+        self.client.force_login(self.diretor_staff)
+        resp = self.client.post(
+            reverse('toggle_acesso', args=[self.admin.pk])
+        )
+        self.assertRedireciona(resp, reverse('painel_diretoria'))
+        self.assertTrue(Usuario.objects.get(pk=self.admin.pk).is_active)
+        self.assertIn((msg_constants.ERROR, MSG_ADMIN), mensagens(resp))
+
+    def test_superusuario_sem_is_staff_continua_protegido(self):
+        """O guard olha is_superuser do alvo, e não is_staff."""
+        self.client.force_login(self.diretor)
+        pk = self.admin_sem_staff.pk
+        self.client.post(reverse('toggle_acesso', args=[pk]))
+        self.client.post(reverse('reset_senha_diretoria', args=[pk]))
+        alvo = Usuario.objects.get(pk=pk)
+        self.assertTrue(alvo.is_active)
+        self.assertTrue(alvo.check_password('Pw-semstaff-123'))
+
+    def test_diretoria_altera_staff_que_nao_e_superusuario(self):
+        self.client.force_login(self.diretor)
+        pk = self.staff_comum.pk
+        resp = self.client.post(reverse('reset_senha_diretoria', args=[pk]))
+        textos = [t for _, t in mensagens(resp) if t.startswith(MSG_SENHA)]
+        self.assertEqual(len(textos), 1)
+        self.client.post(reverse('toggle_acesso', args=[pk]))
+        alvo = Usuario.objects.get(pk=pk)
+        self.assertFalse(alvo.is_active)
+        self.assertTrue(alvo.check_password(textos[0][len(MSG_SENHA):]))
 
 
 class AprovarRecusarTests(PainelDiretoriaTestCase):
@@ -677,7 +768,8 @@ class PainelRenderizadoTests(PainelDiretoriaTestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.inativo = Usuario.objects.create_user(
-            'inativo', password='Pw-inativo-123', is_active=False
+            'inativo', password='Pw-inativo-123', is_active=False,
+            clube=cls.clube,
         )
 
     def setUp(self):
@@ -888,6 +980,22 @@ class PainelRenderizadoTests(PainelDiretoriaTestCase):
         i = self.body.index(f'form="form-toggle-acesso-{self.alvo.pk}"')
         self.assertIn('fa-lock-open text-success', self.body[i:i + 400])
 
+    def test_checkboxes_desktop_e_mobile_sincronizados(self):
+        """Fase 1.5: desmarcar um membro também desmarca a cópia oculta.
+
+        Verificação estática (o test client não executa JS), no mesmo
+        estilo de test_listener_de_confirmacao_presente.
+        """
+        js = '\n'.join(self.p.scripts)
+        self.assertRegex(js, r'outro\.value\s*===\s*this\.value')
+        self.assertRegex(js, r'outro\.checked\s*=\s*this\.checked')
+        # o contador conta membros únicos (cada um tem 2 checkboxes)
+        self.assertRegex(
+            js, r'new Set\(Array\.from\(marcados, cb => cb\.value\)\)'
+        )
+        # script em IIFE: pode ser reexecutado (Turbo) sem redeclarar const
+        self.assertRegex(js, r'\(\(\) => \{\s*// Seus scripts')
+
     def test_rodape_atualizado(self):
         self.assertIn('uma nova senha aleatória é gerada', self.body)
 
@@ -910,3 +1018,437 @@ class ConfiguracaoTests(TestCase):
             )
         except SystemExit:
             self.fail('makemigrations core --check encontrou mudanças')
+
+
+class IsolamentoEntreClubesTests(PainelDiretoriaTestCase):
+    """Fase 2: um clube nunca vê nem altera dados de outro (IDOR)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.outro_clube = Clube.objects.create(
+            nome='Outro Clube', slug='outro-clube'
+        )
+        cls.outra_unidade = Unidade.objects.create(
+            nome='Falcão Alheio', clube=cls.outro_clube
+        )
+        cls.outro_diretor = Usuario.objects.create_user(
+            'outro-diretor', password='Pw-outrodir-123', is_diretoria=True,
+            clube=cls.outro_clube,
+        )
+        cls.outro_usuario = Usuario.objects.create_user(
+            'outro-usuario', password='Pw-outro-123', clube=cls.outro_clube,
+            unidade_responsavel=cls.outra_unidade,
+        )
+        cls.outro_pendente = Desbravador.objects.create(
+            nome_completo='Pendente Alheio', data_nascimento=date(2012, 1, 1),
+            unidade=cls.outra_unidade, aprovado=False,
+        )
+        cls.outro_aprovado = Desbravador.objects.create(
+            nome_completo='Aprovado Alheio', data_nascimento=date(2012, 1, 1),
+            unidade=cls.outra_unidade, aprovado=True,
+        )
+        AvaliacaoSemanal.objects.create(
+            desbravador=cls.outro_aprovado, autor=cls.outro_usuario,
+            observacao='obs alheia',
+        )
+        hoje = date.today()
+        Evento.objects.create(
+            titulo='Evento Nosso', data_evento=hoje, clube=cls.clube
+        )
+        Evento.objects.create(
+            titulo='Evento Alheio', data_evento=hoje, clube=cls.outro_clube
+        )
+
+    def setUp(self):
+        cache.clear()  # o ranking fica em cache (locmem) entre os testes
+
+    def _chaves_do_mes(self):
+        hoje = timezone.now()
+        return tuple(
+            core_views.chave_cache_ranking(c.pk, hoje.month, hoje.year)
+            for c in (self.clube, self.outro_clube)
+        )
+
+    def test_usuario_de_outro_clube_retorna_404(self):
+        self.client.force_login(self.diretor)
+        senha = Usuario.objects.get(pk=self.outro_usuario.pk).password
+        for nome in ('toggle_acesso', 'reset_senha_diretoria'):
+            with self.subTest(view=nome):
+                url = reverse(nome, args=[self.outro_usuario.pk])
+                self.assertEqual(self.client.post(url).status_code, 404)
+        alvo = Usuario.objects.get(pk=self.outro_usuario.pk)
+        self.assertTrue(alvo.is_active)
+        self.assertEqual(alvo.password, senha)
+
+    def test_membro_de_outro_clube_retorna_404(self):
+        self.client.force_login(self.diretor)
+        for nome in ('aprovar_membro', 'recusar_membro'):
+            with self.subTest(view=nome):
+                url = reverse(nome, args=[self.outro_pendente.pk])
+                self.assertEqual(self.client.post(url).status_code, 404)
+        membro = Desbravador.objects.get(pk=self.outro_pendente.pk)
+        self.assertFalse(membro.aprovado)
+
+    def test_avaliar_membro_de_outro_clube_retorna_404(self):
+        self.client.force_login(self.diretor)
+        url = reverse('avaliar_membro', args=[self.outro_aprovado.pk])
+        n = AvaliacaoSemanal.objects.count()
+        self.assertEqual(self.client.get(url).status_code, 404)
+        resp = self.client.post(url, {'biblia': 10})
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(AvaliacaoSemanal.objects.count(), n)
+
+    def test_pontos_em_massa_ignoram_membros_de_outro_clube(self):
+        self.client.force_login(self.diretor)
+        resp = self.client.post(reverse('painel_diretoria'), {
+            'selecionados': [
+                str(self.aprovado.pk), str(self.outro_aprovado.pk)
+            ],
+            'pontos': '10',
+            'motivo': 'Teste IDOR',
+        })
+        self.assertFalse(
+            PontoExtra.objects.filter(desbravador=self.outro_aprovado).exists()
+        )
+        self.assertEqual(
+            PontoExtra.objects.filter(
+                desbravador=self.aprovado, motivo='Teste IDOR'
+            ).count(),
+            1,
+        )
+        self.assertIn(
+            (msg_constants.SUCCESS, '1 desbravadores receberam 10 pontos!'),
+            mensagens(resp),
+        )
+
+    def test_painel_lista_apenas_o_proprio_clube(self):
+        self.client.force_login(self.diretor)
+        body = self.client.get(reverse('painel_diretoria')).content.decode()
+        for alheio in ('Pendente Alheio', 'Aprovado Alheio', 'outro-usuario',
+                       'outro-diretor', 'Falcão Alheio', 'obs alheia'):
+            with self.subTest(alheio=alheio):
+                self.assertNotIn(alheio, body)
+        for nosso in ('Membro Aprovado', 'Pendente Dois', 'alvo', 'Águia',
+                      'obs de teste'):
+            with self.subTest(nosso=nosso):
+                self.assertIn(nosso, body)
+
+    def test_relatorio_e_csv_apenas_do_proprio_clube(self):
+        self.client.force_login(self.diretor)
+        relatorio = self.client.get(reverse('relatorio_mensal'))
+        self.assertContains(relatorio, 'Membro Aprovado')
+        self.assertNotContains(relatorio, 'Aprovado Alheio')
+        csv = self.client.get(reverse('exportar_relatorio_csv'))
+        conteudo = csv.content.decode('utf-8-sig')
+        self.assertIn('Membro Aprovado', conteudo)
+        self.assertNotIn('Aprovado Alheio', conteudo)
+
+    def test_ranking_e_cache_do_dashboard_separados_por_clube(self):
+        self.client.force_login(self.diretor)
+        resp = self.client.get(reverse('dashboard'))
+        self.assertContains(resp, 'Águia')
+        self.assertNotContains(resp, 'Falcão Alheio')
+        # logo em seguida, o outro clube não pode receber o ranking em cache
+        outro = Client()
+        outro.force_login(self.outro_diretor)
+        resp = outro.get(reverse('dashboard'))
+        self.assertContains(resp, 'Falcão Alheio')
+        self.assertNotContains(resp, 'Águia')
+        chave_nossa, chave_alheia = self._chaves_do_mes()
+        hoje = timezone.now()
+        self.assertEqual(
+            chave_nossa,
+            f'ranking_unidades_{self.clube.pk}_{hoje.month}_{hoje.year}',
+        )
+        self.assertIsNotNone(cache.get(chave_nossa))
+        self.assertIsNotNone(cache.get(chave_alheia))
+
+    def test_pontos_em_massa_invalidam_so_o_cache_do_proprio_clube(self):
+        chave_nossa, chave_alheia = self._chaves_do_mes()
+        cache.set(chave_nossa, 'nosso', 600)
+        cache.set(chave_alheia, 'alheio', 600)
+        self.client.force_login(self.diretor)
+        self.client.post(reverse('painel_diretoria'), {
+            'selecionados': [str(self.aprovado.pk)],
+            'pontos': '5',
+            'motivo': 'Cache',
+        })
+        self.assertIsNone(cache.get(chave_nossa))
+        self.assertEqual(cache.get(chave_alheia), 'alheio')
+
+    def test_avaliacao_invalida_so_o_cache_do_proprio_clube(self):
+        chave_nossa, chave_alheia = self._chaves_do_mes()
+        cache.set(chave_nossa, 'nosso', 600)
+        cache.set(chave_alheia, 'alheio', 600)
+        self.client.force_login(self.diretor)
+        dados = {
+            nome: campo.initial
+            for nome, campo in AvaliacaoForm().fields.items()
+        }
+        dados.update(data=date.today().isoformat(), observacao='')
+        resp = self.client.post(
+            reverse('avaliar_membro', args=[self.aprovado.pk]), dados
+        )
+        self.assertRedireciona(resp, reverse('painel_diretoria'))
+        self.assertIsNone(cache.get(chave_nossa))
+        self.assertEqual(cache.get(chave_alheia), 'alheio')
+
+    def test_calendario_mostra_apenas_eventos_do_proprio_clube(self):
+        for usuario in (self.diretor, self.comum):
+            with self.subTest(usuario=usuario.username):
+                self.client.force_login(usuario)
+                resp = self.client.get(reverse('calendario'))
+                self.assertContains(resp, 'Evento Nosso')
+                self.assertNotContains(resp, 'Evento Alheio')
+
+    def test_evento_criado_pertence_ao_clube_do_autor(self):
+        self.client.force_login(self.diretor)
+        resp = self.client.post(reverse('cadastrar_evento'), {
+            'titulo': 'Acampamento', 'data_evento': '2026-11-20',
+            'descricao': '', 'unidade': '',
+        })
+        self.assertRedireciona(resp, reverse('calendario'))
+        self.assertEqual(Evento.objects.get(titulo='Acampamento').clube,
+                         self.clube)
+
+    def test_evento_nao_aceita_unidade_de_outro_clube(self):
+        self.client.force_login(self.diretor)
+        self.client.post(reverse('cadastrar_evento'), {
+            'titulo': 'Invasor', 'data_evento': '2026-11-20',
+            'descricao': '', 'unidade': self.outra_unidade.pk,
+        })
+        self.assertFalse(Evento.objects.filter(titulo='Invasor').exists())
+
+    def test_cadastro_de_membro_so_aceita_unidade_do_proprio_clube(self):
+        self.client.force_login(self.diretor)
+        url = reverse('cadastrar_desbravador')
+        dados = {'data_nascimento': '2012-05-05', 'ativo': 'on'}
+        self.client.post(url, {
+            **dados, 'nome_completo': 'Infiltrado',
+            'unidade': self.outra_unidade.pk,
+        })
+        self.assertFalse(
+            Desbravador.objects.filter(nome_completo='Infiltrado').exists()
+        )
+        self.client.post(url, {
+            **dados, 'nome_completo': 'Novato', 'unidade': self.unidade.pk,
+        })
+        self.assertTrue(Desbravador.objects.filter(
+            nome_completo='Novato', unidade=self.unidade
+        ).exists())
+
+    def test_notificacao_em_massa_so_para_o_proprio_clube(self):
+        self.client.force_login(self.diretor)
+        self.client.post(reverse('enviar_notificacao_massa'), {
+            'titulo': 'Reunião', 'mensagem': 'Sábado', 'publico_alvo': 'todos',
+        })
+        notificacao = NotificacaoManual.objects.get(titulo='Reunião')
+        self.assertEqual(notificacao.clube, self.clube)
+        clubes = set(
+            notificacao.destinatarios.values_list('clube_id', flat=True)
+        )
+        self.assertEqual(clubes, {self.clube.pk})
+        self.assertFalse(NotificacaoInApp.objects.filter(
+            usuario__clube=self.outro_clube
+        ).exists())
+
+    def test_notificacao_para_unidade_de_outro_clube_e_recusada(self):
+        self.client.force_login(self.diretor)
+        resp = self.client.post(reverse('enviar_notificacao_massa'), {
+            'titulo': 'Invasão', 'mensagem': 'x', 'publico_alvo': 'unidade',
+            'unidade_id': str(self.outra_unidade.pk),
+        })
+        self.assertFalse(
+            NotificacaoManual.objects.filter(titulo='Invasão').exists()
+        )
+        self.assertIn(
+            (msg_constants.ERROR, 'Selecione uma unidade válida.'),
+            mensagens(resp),
+        )
+
+    def test_formularios_oferecem_apenas_o_proprio_clube(self):
+        unidades = [self.unidade]
+        form = DesbravadorForm(user=self.diretor)
+        self.assertEqual(list(form.fields['unidade'].queryset), unidades)
+        form = EventoForm(user=self.diretor)
+        self.assertEqual(list(form.fields['unidade'].queryset), unidades)
+        for usuario in (self.diretor, self.comum):
+            with self.subTest(usuario=usuario.username):
+                form = PontoExtraForm(user=usuario)
+                membros = form.fields['desbravador'].queryset
+                self.assertIn(self.aprovado, membros)
+                self.assertNotIn(self.outro_aprovado, membros)
+        # sem usuário não há clube: nenhuma opção (falha fechada)
+        self.assertFalse(DesbravadorForm().fields['unidade'].queryset)
+        self.assertFalse(EventoForm().fields['unidade'].queryset)
+        self.assertFalse(PontoExtraForm().fields['desbravador'].queryset)
+
+
+class ClubeModelTests(TestCase):
+    """Fase 2: o modelo Clube e o vínculo obrigatório dos dados com ele."""
+
+    def test_campos_e_valores_padrao(self):
+        clube = Clube.objects.create(nome='Novo Clube', slug='novo-clube')
+        self.assertEqual(clube.cor_principal, '#0d47a1')
+        self.assertTrue(clube.ativo)
+        self.assertIsNotNone(clube.data_criacao)
+        self.assertFalse(clube.logo)
+        self.assertEqual(str(clube), 'Novo Clube')
+        self.assertIsInstance(
+            Clube._meta.get_field('logo'), models.ImageField
+        )
+        self.assertIsInstance(
+            Clube._meta.get_field('slug'), models.SlugField
+        )
+
+    def test_slug_unico(self):
+        Clube.objects.create(nome='A', slug='mesmo-slug')
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Clube.objects.create(nome='B', slug='mesmo-slug')
+
+    def test_clube_obrigatorio_nos_modelos(self):
+        criar_sem_clube = {
+            'Unidade': lambda: Unidade.objects.create(nome='Sem clube'),
+            'Usuario': lambda: Usuario.objects.create_user(
+                'sem-clube', password='x'
+            ),
+            'Evento': lambda: Evento.objects.create(
+                titulo='x', data_evento=date(2026, 1, 1)
+            ),
+            'NotificacaoManual': lambda: NotificacaoManual.objects.create(
+                titulo='x', mensagem='y'
+            ),
+        }
+        for nome, criar in criar_sem_clube.items():
+            with self.subTest(modelo=nome):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    criar()
+        nomes = {
+            Unidade: 'unidades', Usuario: 'usuarios', Evento: 'eventos',
+            NotificacaoManual: 'notificacoes',
+        }
+        for modelo, related_name in nomes.items():
+            with self.subTest(modelo=modelo.__name__):
+                campo = modelo._meta.get_field('clube')
+                self.assertFalse(campo.null)
+                self.assertIs(campo.related_model, Clube)
+                self.assertIs(campo.remote_field.on_delete, models.CASCADE)
+                self.assertEqual(campo.remote_field.related_name, related_name)
+
+    def test_createsuperuser_exige_e_aceita_o_clube(self):
+        clube = Clube.objects.create(nome='Clube Admin', slug='clube-admin')
+        with self.assertRaises(CommandError):
+            call_command(
+                'createsuperuser', interactive=False, username='sem-clube',
+                email='a@a.com', stdout=StringIO(), stderr=StringIO(),
+            )
+        call_command(
+            'createsuperuser', interactive=False, username='root2',
+            email='r@r.com', clube=str(clube.pk), stdout=StringIO(),
+        )
+        usuario = Usuario.objects.get(username='root2')
+        self.assertTrue(usuario.is_superuser)
+        self.assertEqual(usuario.clube, clube)
+
+    def test_unidade_precisa_ser_do_mesmo_clube(self):
+        clube_a = Clube.objects.create(nome='A', slug='clube-a')
+        clube_b = Clube.objects.create(nome='B', slug='clube-b')
+        unidade_b = Unidade.objects.create(nome='Unidade B', clube=clube_b)
+        usuario = Usuario(
+            username='u', clube=clube_a, unidade_responsavel=unidade_b
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            usuario.full_clean(exclude=['password'])
+        self.assertIn('unidade_responsavel', ctx.exception.message_dict)
+        evento = Evento(
+            titulo='x', data_evento=date(2026, 1, 1), clube=clube_a,
+            unidade=unidade_b,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            evento.full_clean()
+        self.assertIn('unidade', ctx.exception.message_dict)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, PASSWORD_HASHERS=HASHER_RAPIDO)
+class AdminClubeTests(TestCase):
+    """O admin continua criando usuários agora que o clube é obrigatório."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.clube = Clube.objects.create(nome='Clube', slug='clube')
+        cls.root = Usuario.objects.create_superuser(
+            'root', password='Pw-root-123', clube=cls.clube
+        )
+
+    def test_admin_cria_usuario_com_clube(self):
+        self.client.force_login(self.root)
+        url = reverse('admin:core_usuario_add')
+        self.assertContains(self.client.get(url), 'name="clube"')
+        resp = self.client.post(url, {
+            'username': 'novo', 'usable_password': 'true',
+            'password1': 'Senha-forte-123', 'password2': 'Senha-forte-123',
+            'clube': self.clube.pk,
+        })
+        self.assertEqual(resp.status_code, 302)
+        novo = Usuario.objects.get(username='novo')
+        self.assertEqual(novo.clube, self.clube)
+
+    def test_listagens_do_admin_carregam(self):
+        self.client.force_login(self.root)
+        for nome in ('admin:core_clube_changelist', 'admin:core_clube_add',
+                     'admin:core_usuario_changelist'):
+            with self.subTest(url=nome):
+                resp = self.client.get(reverse(nome))
+                self.assertEqual(resp.status_code, 200)
+
+
+class MigracaoClubePadraoTests(TransactionTestCase):
+    """Dados existentes (sem clube) vão para o clube padrão na migração.
+
+    Reproduz o caminho de produção: banco na 0012, com dados, migrado até a
+    0015 (FKs obrigatórias). Nenhum registro pode ficar sem clube.
+    """
+
+    antes = [('core', '0012_notificacaoinapp')]
+    depois = [(
+        'core', '0015_alter_usuario_managers_alter_evento_clube_and_more'
+    )]
+
+    def tearDown(self):
+        # devolve o banco de teste à última migração
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes('core'))
+        super().tearDown()
+
+    def test_registros_existentes_vao_para_o_clube_padrao(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.antes)
+        apps = executor.loader.project_state(self.antes).apps
+        unidade = apps.get_model('core', 'Unidade').objects.create(nome='U')
+        apps.get_model('core', 'Usuario').objects.create(
+            username='antigo', password='x', unidade_responsavel=unidade
+        )
+        apps.get_model('core', 'Evento').objects.create(
+            titulo='Antigo', data_evento=date(2026, 1, 1)
+        )
+        apps.get_model('core', 'NotificacaoManual').objects.create(
+            titulo='Antiga', mensagem='m'
+        )
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.depois)
+        apps = executor.loader.project_state(self.depois).apps
+        padrao = apps.get_model('core', 'Clube').objects.get(
+            slug='jovens-do-rei'
+        )
+        self.assertEqual(padrao.nome, 'Jovens do Rei')
+        for nome in ('Unidade', 'Usuario', 'Evento', 'NotificacaoManual'):
+            with self.subTest(modelo=nome):
+                modelo = apps.get_model('core', nome)
+                self.assertGreater(modelo.objects.count(), 0)
+                self.assertEqual(
+                    modelo.objects.filter(clube=padrao).count(),
+                    modelo.objects.count(),
+                )
+                self.assertFalse(modelo._meta.get_field('clube').null)

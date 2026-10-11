@@ -424,6 +424,8 @@
 </div>
 
 <script>
+// IIFE: sem const globais, o script pode ser reexecutado (ex.: Turbo) sem erro de redeclaração
+(() => {
     // Seus scripts de selecionar todos continuam os mesmos aqui!
     const selectAll = document.getElementById('selectAll');
     const selectAllMobile = document.getElementById('selectAllMobile');
@@ -464,6 +466,7 @@
             }
         });
     }
+})();
 </script>
 
 <script>
