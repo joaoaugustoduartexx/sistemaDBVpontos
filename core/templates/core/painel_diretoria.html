@@ -162,7 +162,7 @@
         </form>
     </div>
 
-<div class="tab-pane fade" id="observacoes-pane" role="tabpanel" tabindex="0">
+    <div class="tab-pane fade" id="observacoes-pane" role="tabpanel" tabindex="0">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-light border-bottom text-center text-md-start">
                 <h5 class="mb-0 text-dark fw-semibold">Observações dos Conselheiros</h5>
@@ -228,12 +228,18 @@
                                     <span class="badge {{ dbv.unidade.cor }} border">{{ dbv.unidade.nome }}</span>
                                 </td>
                                 <td class="text-center py-3">
-                                    <a href="{% url 'aprovar_membro' dbv.id %}" class="btn btn-sm btn-success fw-bold shadow-sm me-2">
-                                        <i class="fas fa-check-circle me-1"></i> Aprovar
-                                    </a>
-                                    <a href="{% url 'recusar_membro' dbv.id %}" class="btn btn-sm btn-outline-danger fw-bold" onclick="return confirm('Tem certeza que deseja recusar e excluir o cadastro de {{ dbv.nome_completo }}?');">
-                                        <i class="fas fa-times-circle me-1"></i> Recusar
-                                    </a>
+                                    <form method="POST" action="{% url 'aprovar_membro' dbv.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-success fw-bold shadow-sm me-2">
+                                            <i class="fas fa-check-circle me-1"></i> Aprovar
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{% url 'recusar_membro' dbv.id %}" class="d-inline form-recusar-membro" data-nome="{{ dbv.nome_completo }}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
+                                            <i class="fas fa-times-circle me-1"></i> Recusar
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -250,12 +256,19 @@
                             <span class="badge {{ dbv.unidade.cor }} border align-self-start mt-1">{{ dbv.unidade.nome }}</span>
                         </div>
                         <div class="d-flex gap-2">
-                            <a href="{% url 'aprovar_membro' dbv.id %}" class="btn btn-success fw-bold flex-fill shadow-sm">
-                                <i class="fas fa-check-circle me-1"></i> Aprovar
-                            </a>
-                            <a href="{% url 'recusar_membro' dbv.id %}" class="btn btn-outline-danger fw-bold flex-fill" onclick="return confirm('Deseja excluir o cadastro de {{ dbv.nome_completo }}?');">
-                                <i class="fas fa-times-circle me-1"></i> Recusar
-                            </a>
+                            {# O form ocupa o espaço (flex-fill) que antes era do link; o botão preenche o form (w-100) #}
+                            <form method="POST" action="{% url 'aprovar_membro' dbv.id %}" class="flex-fill">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-success fw-bold w-100 shadow-sm">
+                                    <i class="fas fa-check-circle me-1"></i> Aprovar
+                                </button>
+                            </form>
+                            <form method="POST" action="{% url 'recusar_membro' dbv.id %}" class="flex-fill form-recusar-membro" data-nome="{{ dbv.nome_completo }}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger fw-bold w-100">
+                                    <i class="fas fa-times-circle me-1"></i> Recusar
+                                </button>
+                            </form>
                         </div>
                     </div>
                     {% endfor %}
@@ -301,17 +314,20 @@
                                 {% if usu.is_superuser %}
                                     <span class="badge bg-danger text-white"><i class="fas fa-shield-alt me-1"></i> Intocável (Admin)</span>
                                 {% else %}
+                                    {# Os botões precisam ser filhos diretos do .btn-group; por isso apontam para os forms via atributo form="" #}
+                                    <form method="POST" action="{% url 'toggle_acesso' usu.id %}" id="form-toggle-acesso-{{ usu.id }}" class="d-none">{% csrf_token %}</form>
+                                    <form method="POST" action="{% url 'reset_senha_diretoria' usu.id %}" id="form-reset-senha-{{ usu.id }}" class="d-none" data-confirm="Resetar a senha deste usuário? Uma nova senha aleatória será gerada.">{% csrf_token %}</form>
                                     <div class="btn-group shadow-sm">
-                                        <a href="{% url 'toggle_acesso' usu.id %}" class="btn btn-sm btn-white border">
+                                        <button type="submit" form="form-toggle-acesso-{{ usu.id }}" class="btn btn-sm btn-white border">
                                             {% if usu.is_active %}
                                                 <i class="fas fa-lock-open text-success fa-lg" title="Bloquear"></i>
                                             {% else %}
                                                 <i class="fas fa-lock text-danger fa-lg" title="Liberar"></i>
                                             {% endif %}
-                                        </a>
-                                        <a href="{% url 'reset_senha_diretoria' usu.id %}" class="btn btn-sm btn-white border" onclick="return confirm('Resetar senha para dbv@123?');">
+                                        </button>
+                                        <button type="submit" form="form-reset-senha-{{ usu.id }}" class="btn btn-sm btn-white border">
                                             <i class="fas fa-key text-warning"></i>
-                                        </a>
+                                        </button>
                                     </div>
                                 {% endif %}
                             </td>
@@ -336,12 +352,18 @@
                                 <span class="badge bg-danger text-white p-2"><i class="fas fa-shield-alt"></i> Admin</span>
                             {% else %}
                                 <div class="d-flex flex-column gap-2">
-                                    <a href="{% url 'toggle_acesso' usu.id %}" class="btn btn-sm border {% if usu.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
-                                        {% if usu.is_active %} Bloquear {% else %} Liberar {% endif %}
-                                    </a>
-                                    <a href="{% url 'reset_senha_diretoria' usu.id %}" class="btn btn-sm btn-warning fw-bold text-dark" onclick="return confirm('Resetar senha?');">
-                                        Resetar Senha
-                                    </a>
+                                    <form method="POST" action="{% url 'toggle_acesso' usu.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm border w-100 {% if usu.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                                            {% if usu.is_active %} Bloquear {% else %} Liberar {% endif %}
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{% url 'reset_senha_diretoria' usu.id %}" data-confirm="Resetar a senha deste usuário? Uma nova senha aleatória será gerada.">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-warning fw-bold text-dark w-100">
+                                            Resetar Senha
+                                        </button>
+                                    </form>
                                 </div>
                             {% endif %}
                         </div>
@@ -351,7 +373,7 @@
             </div>
 
             <div class="card-footer bg-white pt-3">
-                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Senhas resetadas voltam ao padrão: <strong>dbv@123</strong>. Administradores Master não podem ser alterados por aqui.</small>
+                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Ao resetar uma senha, uma nova senha aleatória é gerada e exibida uma única vez no aviso de sucesso. Administradores Master não podem ser alterados por aqui.</small>
             </div>
         </div>
     </div>
@@ -409,14 +431,23 @@
     const countDisplay = document.getElementById('countSelected');
 
     function updateCounter() {
-        const checkedCount = document.querySelectorAll('.checkbox-item:checked').length;
+        // Cada membro tem 2 checkboxes (desktop e mobile) com o mesmo value: conta membros únicos
+        const marcados = document.querySelectorAll('.checkbox-item:checked');
+        const checkedCount = new Set(Array.from(marcados, cb => cb.value)).size;
         countDisplay.textContent = checkedCount + " selecionados";
         countDisplay.className = checkedCount > 0 ? "badge bg-danger fs-6" : "badge bg-dark fs-6";
     }
 
     if(selectAll) { selectAll.addEventListener('change', function() { checkboxes.forEach(cb => cb.checked = this.checked); if(selectAllMobile) selectAllMobile.checked = this.checked; updateCounter(); }); }
     if(selectAllMobile) { selectAllMobile.addEventListener('change', function() { checkboxes.forEach(cb => cb.checked = this.checked); if(selectAll) selectAll.checked = this.checked; updateCounter(); }); }
-    checkboxes.forEach(cb => cb.addEventListener('change', updateCounter));
+    // Sincroniza a cópia desktop/mobile do mesmo membro (mesmo value): sem isso, desmarcar na tabela
+    // deixava a cópia oculta marcada e o membro recebia os pontos mesmo assim
+    checkboxes.forEach(cb => cb.addEventListener('change', function() {
+        checkboxes.forEach(outro => {
+            if (outro !== this && outro.value === this.value) outro.checked = this.checked;
+        });
+        updateCounter();
+    }));
 
     // Lógica para o Dropdown de Público-Alvo no Push
     const publicoAlvoSelect = document.getElementById('publicoAlvoSelect');
@@ -433,5 +464,30 @@
             }
         });
     }
+</script>
+
+<script>
+    // Script separado e sem declarações globais: pode ser reexecutado (ex.: Turbo) e não é interrompido
+    // por erros no script acima — as confirmações de ações destrutivas precisam sempre ser registradas.
+
+    // Confirmação da recusa: o nome vem de data-nome (escapado pelo Django) e o confirm() exibe texto puro.
+    // Nunca interpolar dados do usuário em onclick="" — o navegador decodifica &#x27; de volta para ' antes de executar o JS.
+    document.querySelectorAll('form.form-recusar-membro').forEach(form => {
+        form.addEventListener('submit', event => {
+            const nome = form.dataset.nome;
+            if (!confirm('Tem certeza que deseja recusar e excluir o cadastro de ' + nome + '?')) {
+                event.preventDefault();
+            }
+        });
+    });
+
+    // Confirmação com texto fixo (ex.: reset de senha)
+    document.querySelectorAll('form[data-confirm]').forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!confirm(form.dataset.confirm)) {
+                event.preventDefault();
+            }
+        });
+    });
 </script>
 {% endblock %}

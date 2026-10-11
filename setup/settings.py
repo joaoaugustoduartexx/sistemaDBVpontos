@@ -24,15 +24,15 @@ ALLOWED_HOSTS = hosts.split(',') if hosts else []
 
 # Application definition
 INSTALLED_APPS = [
-    'jazzmin', # JAZZMIN SEMPRE NO TOPO!
+    'jazzmin',  # JAZZMIN SEMPRE NO TOPO!
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'core', # Seu app principal
-    'webpush', # Para notificações push
+    'core',  # Seu app principal
+    'webpush',  # Para notificações push
 ]
 
 MIDDLEWARE = [
@@ -50,7 +50,7 @@ ROOT_URLCONF = 'setup.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [], # Deixamos vazio pois o Django buscará dentro da pasta 'core/templates'
+        'DIRS': [],  # Deixamos vazio pois o Django buscará dentro da pasta 'core/templates'
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -73,12 +73,15 @@ DATABASES = {
     }
 }
 
+# Tipo padrão das PKs (as migrations do app core já usam BigAutoField)
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
-    { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
-    { 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
-    { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
 # Internationalization
@@ -89,7 +92,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles') # Obrigatório para o PythonAnywhere
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Obrigatório para o PythonAnywhere
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 # --- CONFIGURAÇÕES DO SISTEMA DBV ---
@@ -112,11 +115,11 @@ WEBPUSH_SETTINGS = {
 if not DEBUG:
     # Garante que todo o tráfego passe por HTTPS
     SECURE_SSL_REDIRECT = True
-    
+
     # Protege os cookies de sessão e CSRF (evita roubo de login em Wi-Fi público)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    
+
     # Força os navegadores a lembrarem que o site é HTTPS por 1 ano (HSTS)
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
