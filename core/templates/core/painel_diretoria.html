@@ -184,7 +184,8 @@
                                 </p>
                                 <div class="text-end mt-auto">
                                     <span class="badge bg-white text-dark border">
-                                        <i class="fas fa-user-edit text-warning me-1"></i> {{ obs.autor.get_full_name|default:obs.autor.username }}
+                                        {# firstof: autor é SET_NULL; obs.autor.username como argumento de filtro dava 500 quando o autor era nulo #}
+                                        <i class="fas fa-user-edit text-warning me-1"></i> {% firstof obs.autor.get_full_name obs.autor.username "Autor removido" %}
                                     </span>
                                 </div>
                             </div>

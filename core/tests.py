@@ -1091,6 +1091,16 @@ class PainelRenderizadoTests(PainelDiretoriaTestCase):
     def test_rodape_atualizado(self):
         self.assertIn('uma nova senha aleatória é gerada', self.body)
 
+    def test_observacao_sem_autor_nao_quebra_o_painel(self):
+        """autor é SET_NULL: a observação de um autor excluído dava 500."""
+        AvaliacaoSemanal.objects.create(
+            desbravador=self.aprovado, observacao='autor apagado'
+        )
+        resp = self.client.get(reverse('painel_diretoria'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'autor apagado')
+        self.assertContains(resp, 'Autor removido')
+
 
 class ConfiguracaoTests(TestCase):
     def test_default_auto_field_e_bigautofield(self):
